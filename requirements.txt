@@ -1,7 +1,19 @@
+# Core dependencies
 anthropic>=0.54.0
 python-dotenv>=1.0.0
+pydantic>=2.0.0
+
+# MCP server (Model Context Protocol)
 mcp[cli]>=1.0.0
 anyio>=4.0.0
+
+# DeepAgent orchestration
+# NOTE: 'deepagents' package name may differ — check Anthropic SDK docs.
+# If unavailable, cnc.agent falls back to direct Anthropic API calls.
+# deepagents>=0.1.0          # optional: uncomment when confirmed package name
+# claude-agent-sdk>=0.1.0    # alternative package name
+
+# LangChain (used by scripts/cnc_milling.py and agent.py ReAct agent)
 langchain>=0.3.0
 langchain-anthropic>=0.3.0
 langchain-mcp-adapters>=0.1.0
