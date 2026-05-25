@@ -9,14 +9,21 @@ description = "GenAI4G — Claude agent with MCP server skills"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.54.0",
-    "claude-agent-sdk>=0.1.0",
     "mcp[cli]>=1.0.0",
     "anyio>=4.0.0",
+    "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
 ]
 
+[project.optional-dependencies]
+langchain = [
+    "langchain>=0.3.0",
+    "langchain-anthropic>=0.3.0",
+    "langgraph>=0.2.0",
+]
+
 [project.scripts]
-genai4g-server = "genai4g.server:mcp.run"
+genai4g-server = "cnc.server:mcp.run"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/genai4g"]
+packages = ["cnc"]

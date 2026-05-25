@@ -191,13 +191,19 @@ def _extract_json(text: str) -> dict | None:
         return json.loads(text.strip())
     except json.JSONDecodeError:
         pass
-    # Try extracting JSON block
-    match = re.search(r"\{[\s\S]*\}", text)
-    if match:
+    # Strip markdown code fences (```json ... ``` or ``` ... ```)
+    fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+    if fenced:
+        try:
+            return json.loads(fenced.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+    # Try extracting largest JSON object
+    for match in re.finditer(r"\{[\s\S]*\}", text):
         try:
             return json.loads(match.group())
         except json.JSONDecodeError:
-            pass
+            continue
     return None
 
 
