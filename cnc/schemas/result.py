@@ -1,6 +1,6 @@
 """Result schemas — output types for G-code generation pipeline."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .job_spec import MachineType
 
@@ -17,5 +17,6 @@ class GCodeResult(BaseModel):
     operation_plan: dict | None = None
     assumptions: list[str] = []
     warnings: list[str] = []
+    errors: list[str] = Field(default_factory=list)
     validation: ValidationResult
     machine_type: MachineType | None = None

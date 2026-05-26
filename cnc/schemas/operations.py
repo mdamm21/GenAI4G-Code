@@ -1,7 +1,7 @@
 """Operation plan schemas — structured representation of machining steps."""
 
 from typing import Any, Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .job_spec import MachineType
 
@@ -36,3 +36,4 @@ class OperationPlan(BaseModel):
     operations: list[Operation] = []
     assumptions: list[str] = []
     warnings: list[str] = []
+    missing_info: list[str] = Field(default_factory=list)

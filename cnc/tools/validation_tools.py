@@ -1,8 +1,14 @@
 """Validation tools — check operation plans before postprocessing."""
 
+# Drill operation types that require complete x/y/z/feedrate parameters.
+_DRILL_OP_TYPES = {"drill", "drilling", "peck_drill", "bore", "ream"}
+
 
 def validate_operation_plan(operation_plan: dict) -> dict:
     """Validate a structured operation plan dict.
+
+    Performs generic checks for all machine types and additional
+    drill-specific checks when machine_type == "drill".
 
     Returns:
         {
@@ -18,8 +24,10 @@ def validate_operation_plan(operation_plan: dict) -> dict:
         errors.append("Operation plan is empty or None.")
         return {"ok": False, "errors": errors, "warnings": warnings}
 
-    # Required fields
-    if not operation_plan.get("machine_type"):
+    machine_type: str = operation_plan.get("machine_type") or ""
+
+    # --- Required fields (all machine types) ---
+    if not machine_type:
         errors.append("Missing required field: machine_type.")
 
     if not operation_plan.get("units"):
@@ -29,23 +37,28 @@ def validate_operation_plan(operation_plan: dict) -> dict:
     if safe_z is None:
         errors.append("Missing required field: safe_z.")
     elif isinstance(safe_z, (int, float)) and safe_z <= 0:
-        warnings.append(f"safe_z={safe_z} is not positive. Safe Z should be above workpiece.")
+        warnings.append(
+            f"safe_z={safe_z} is not positive. Safe Z should be above the workpiece."
+        )
 
     operations = operation_plan.get("operations")
     if not operations:
         errors.append("No operations defined in plan.")
-    else:
+
+    # --- Generic per-operation checks ---
+    if operations:
         for i, op in enumerate(operations):
             if not isinstance(op, dict):
                 warnings.append(f"Operation {i} is not a dict, skipping detail checks.")
                 continue
+            op_label = f"Operation {i} ('{op.get('name', op.get('type', i))}')"
             if not op.get("feedrate_mmpm") and not op.get("feedrate"):
-                warnings.append(f"Operation '{op.get('name', i)}' has no feedrate defined.")
-            tool_num = op.get("tool_number")
-            if tool_num is None:
-                warnings.append(f"Operation '{op.get('name', i)}' has no tool_number.")
+                # For drill this becomes an error below; here it is a generic warning
+                warnings.append(f"{op_label} has no feedrate defined.")
+            if op.get("tool_number") is None and op.get("tool_id") is None:
+                warnings.append(f"{op_label} has no tool_number or tool_id.")
 
-    # Tool data completeness
+    # --- Tool data completeness (all machine types) ---
     tools = operation_plan.get("tools", [])
     if not tools:
         warnings.append("No tool definitions found in operation plan.")
@@ -53,8 +66,46 @@ def validate_operation_plan(operation_plan: dict) -> dict:
         for t in tools:
             if not isinstance(t, dict):
                 continue
+            tid = t.get("tool_number") or t.get("id") or "?"
             if not t.get("diameter_mm") and not t.get("diameter"):
-                warnings.append(f"Tool {t.get('tool_number', '?')} has no diameter defined.")
+                warnings.append(f"Tool {tid} has no diameter defined.")
+
+    # --- Drill-specific checks ---
+    if machine_type == "drill" and operations:
+        for i, op in enumerate(operations):
+            if not isinstance(op, dict):
+                continue
+            op_type = op.get("type", "")
+            if op_type not in _DRILL_OP_TYPES and op_type:
+                # Not a drill-type operation — skip drill-specific checks
+                continue
+
+            op_label = f"Operation {i} (type='{op_type}')"
+            params = op.get("parameters", {})
+
+            # x, y, z are errors — cannot drill without coordinates
+            if params.get("x") is None:
+                errors.append(f"{op_label}: missing required parameter 'x' (hole X position).")
+            if params.get("y") is None:
+                errors.append(f"{op_label}: missing required parameter 'y' (hole Y position).")
+            if params.get("z") is None:
+                errors.append(
+                    f"{op_label}: missing required parameter 'z' (drill depth/target Z)."
+                )
+
+            # feedrate is an error for drill — G1 without F is illegal
+            if not op.get("feedrate_mmpm") and not op.get("feedrate"):
+                errors.append(
+                    f"{op_label}: missing required 'feedrate' "
+                    "(G1 plunge without feedrate is not safe)."
+                )
+
+            # spindle_speed is a warning — can drill without spindle cmd but unusual
+            if not op.get("spindle_rpm") and not op.get("spindle_speed"):
+                warnings.append(
+                    f"{op_label}: no spindle_speed/spindle_rpm specified. "
+                    "Spindle start (M03) will be skipped."
+                )
 
     ok = len(errors) == 0
     return {"ok": ok, "errors": errors, "warnings": warnings}
