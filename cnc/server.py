@@ -48,6 +48,7 @@ from cnc.tools.drill_tools import (
 from cnc.tools.milling_tools import (
     generate_milling_facing_gcode_from_params,
     generate_milling_slot_gcode_from_params,
+    generate_milling_pocket_gcode_from_params,
 )
 from cnc.tools.machine_profiles import list_machine_profiles, get_machine_profile
 
@@ -662,7 +663,112 @@ def generate_milling_slot_gcode(
 
 
 # ---------------------------------------------------------------------------
-# Tool 11: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
+# Tool 11: generate_milling_pocket_gcode  (deterministic, no API key needed)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def generate_milling_pocket_gcode(
+    origin_x: float,
+    origin_y: float,
+    width: float,
+    height: float,
+    depth: float,
+    tool_diameter: float,
+    step_down: float | None = None,
+    step_over: float | None = None,
+    safe_z: float | None = None,
+    feedrate: float | None = None,
+    spindle_speed: float | None = None,
+    units: str = "mm",
+    work_coordinate_system: str = "G54",
+    material: str | None = None,
+    machine_profile: str | None = None,
+    postprocessor: str = "fanuc",
+) -> dict:
+    """Generate conservative milling pocket G-code from explicit rectangular pocket parameters.
+
+    This deterministic tool does not use an LLM or API key.
+
+    Pipeline:
+        1. Builds a structured OperationPlan from the typed parameters.
+        2. Validates the plan (missing params, invalid values -> errors).
+        3. Calls the Fanuc postprocessor to generate conservative G-code.
+        4. Returns a structured result with ok, gcode, warnings, errors.
+
+    Args:
+        origin_x: X position of the lower-left corner of the pocket.
+        origin_y: Y position of the lower-left corner of the pocket.
+        width: Pocket width along X (must be > 0, in units).
+        height: Pocket height along Y (must be > 0, in units).
+        depth: Total cutting depth as a positive number (e.g. 3 -> cuts to Z=-3).
+               Negative values are accepted and interpreted as target Z.
+        tool_diameter: End mill diameter (must be > 0, in units).
+        step_down: Z depth per pass (must be > 0). None -> error, no G-code generated.
+        step_over: Radial step-over per raster row (must be > 0).
+                   Values > tool_diameter produce a warning (may leave uncut material).
+                   None -> error, no G-code generated.
+        safe_z: Safe retract height above the workpiece. Filled from profile if None.
+        feedrate: Cutting feedrate in units/min. None -> error, no G-code generated.
+        spindle_speed: Spindle speed in RPM. None -> M03 skipped (with warning).
+        units: "mm" (default) or "inch".
+        work_coordinate_system: WCS code, e.g. "G54".
+        material: Optional material description (informational).
+        machine_profile: Built-in machine profile name (e.g. "generic_mill_mm").
+        postprocessor: "fanuc" (default). Other values reserved for future use.
+
+    Returns:
+        {
+          "ok": bool,
+          "machine_type": "mill",
+          "operation_plan": dict,
+          "gcode": str,
+          "validation": dict,
+          "warnings": list[str],
+          "errors": list[str],
+          "postprocessor": str,
+          "machine_profile": str | None,
+        }
+
+    Safety note:
+        Generated G-code is for review and simulation only.
+        Never run on a real machine without expert verification.
+    """
+    try:
+        return generate_milling_pocket_gcode_from_params(
+            origin_x=origin_x,
+            origin_y=origin_y,
+            width=width,
+            height=height,
+            depth=depth,
+            tool_diameter=tool_diameter,
+            step_down=step_down,
+            step_over=step_over,
+            safe_z=safe_z,
+            feedrate=feedrate,
+            spindle_speed=spindle_speed,
+            units=units,
+            work_coordinate_system=work_coordinate_system,
+            material=material,
+            machine_profile=machine_profile,
+            postprocessor=postprocessor,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "machine_type": "mill",
+            "operation_plan": {},
+            "gcode": "",
+            "validation": {"ok": False, "errors": [str(exc)], "warnings": []},
+            "warnings": [],
+            "errors": [f"generate_milling_pocket_gcode: unexpected error: {exc}"],
+            "postprocessor": postprocessor,
+            "machine_profile": machine_profile,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tool 12: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
 # ---------------------------------------------------------------------------
 
 

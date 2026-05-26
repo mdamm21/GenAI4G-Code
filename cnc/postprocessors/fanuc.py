@@ -197,13 +197,109 @@ def _append_face_mill(
 def _append_pocket(
     lines: list, op: dict, feedrate, depth, safe_z: float | None
 ) -> None:
+    """Generate conservative Fanuc raster pocket moves for a rectangular pocket.
+
+    Strategy: for each Z level (step_down increments down to target_z),
+    mill parallel rows along X from origin_y to origin_y+height, stepping Y
+    by step_over. Direction alternates (boustrophedon) between rows.
+
+    Safety rules:
+    - No G1 cutting move without feedrate.
+    - No motion without safe_z (skip with comment).
+    - No cutter compensation (G41/G42).
+    - All parameters taken from operation.parameters.
+    """
     params = op.get("parameters", {})
-    lines.append("(POCKET: SEE PARAMETERS FOR GEOMETRY)")
-    lines.append(f"(PARAMETERS: {params})")
-    lines.append("(TODO: Full pocket cycle not yet generated — manual programming required)")
-    f = feedrate or 400
-    z_cut = -abs(depth) if depth else -5.0
-    lines.append(f"(PLUNGE DEPTH WOULD BE: Z{z_cut:.3f} F{f:.0f})")
+
+    origin_x = params.get("origin_x")
+    origin_y = params.get("origin_y")
+    width = params.get("width")
+    height = params.get("height")
+    target_z = params.get("target_z")
+    step_down = params.get("step_down")
+    step_over = params.get("step_over")
+    f = feedrate
+
+    # Safety: abort if any required parameter is missing
+    missing = [
+        name for name, val in [
+            ("origin_x", origin_x), ("origin_y", origin_y),
+            ("width", width), ("height", height),
+            ("target_z", target_z), ("step_down", step_down),
+            ("step_over", step_over),
+        ]
+        if val is None
+    ]
+    if missing:
+        lines.append(
+            f"(POCKET SKIPPED — MISSING PARAMETERS: {', '.join(missing)})"
+        )
+        return
+
+    if f is None:
+        lines.append(
+            f"(POCKET SKIPPED — NO FEEDRATE DEFINED. "
+            f"WOULD POCKET {float(width):.3f}x{float(height):.3f} TO Z{float(target_z):.3f})"
+        )
+        return
+
+    if safe_z is None:
+        lines.append("(POCKET SKIPPED — SAFE Z NOT DEFINED)")
+        return
+
+    ox = float(origin_x)
+    oy = float(origin_y)
+    w = float(width)
+    h = float(height)
+    tz = float(target_z)
+    sd = float(step_down)
+    so = float(step_over)
+    f_val = float(f)
+
+    # Ensure target_z is negative
+    if tz > 0:
+        tz = -tz
+        lines.append(f"(NOTE: target_z sign corrected to Z{tz:.3f})")
+
+    # Clamp step_down to total depth if larger (one pass)
+    if sd > abs(tz):
+        sd = abs(tz)
+
+    lines.append(
+        f"(POCKET: {w:.3f}x{h:.3f} FROM X{ox:.3f} Y{oy:.3f}, "
+        f"DEPTH Z{tz:.3f}, STEP-DOWN {sd:.3f}, STEP-OVER {so:.3f})"
+    )
+    lines.append("(Pocket raster clearing; no cutter compensation applied)")
+
+    # Build Z levels
+    z_levels: list[float] = []
+    z_current = -sd
+    while z_current > tz + 1e-9:
+        z_levels.append(z_current)
+        z_current -= sd
+    z_levels.append(tz)
+
+    for z_pass, z_level in enumerate(z_levels, start=1):
+        lines.append(f"(Z PASS {z_pass} — DEPTH Z{z_level:.3f})")
+        lines.append(f"G00 Z{safe_z:.3f} (RETRACT TO SAFE Z)")
+        lines.append(f"G00 X{ox:.3f} Y{oy:.3f} (RAPID TO POCKET ORIGIN)")
+        lines.append(f"G01 Z{z_level:.3f} F{f_val:.3f} (PLUNGE TO DEPTH)")
+
+        y = oy
+        row = 0
+        direction = 1  # 1 = left-to-right, -1 = right-to-left
+        while y <= oy + h + 1e-9:
+            row += 1
+            x_start = ox if direction == 1 else ox + w
+            x_end = ox + w if direction == 1 else ox
+            dir_label = "L>R" if direction == 1 else "R>L"
+            lines.append(f"(ROW {row} — Y{y:.3f} — {dir_label})")
+            lines.append(f"G00 X{x_start:.3f} Y{y:.3f} (RAPID TO ROW START)")
+            lines.append(f"G01 X{x_end:.3f} F{f_val:.3f} (CUT ROW)")
+            y += so
+            direction *= -1
+
+        lines.append(f"G00 Z{safe_z:.3f} (RETRACT AFTER Z LEVEL)")
 
 
 def _append_profile(

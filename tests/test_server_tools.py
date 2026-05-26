@@ -545,3 +545,89 @@ def test_generate_milling_slot_gcode_invalid_direction_not_ok():
         step_down=1,
     )
     assert result["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# J) generate_milling_pocket_gcode
+# ---------------------------------------------------------------------------
+
+_POCKET_PARAMS = dict(
+    origin_x=0.0,
+    origin_y=0.0,
+    width=20.0,
+    height=10.0,
+    depth=3.0,
+    tool_diameter=5.0,
+    step_down=1.0,
+    step_over=2.0,
+    safe_z=5.0,
+    feedrate=150.0,
+    spindle_speed=3000.0,
+)
+
+
+def test_generate_milling_pocket_gcode_importable():
+    from cnc.server import generate_milling_pocket_gcode
+    assert callable(generate_milling_pocket_gcode)
+
+
+def test_generate_milling_pocket_gcode_ok():
+    from cnc.server import generate_milling_pocket_gcode
+    result = generate_milling_pocket_gcode(**_POCKET_PARAMS)
+    assert result["ok"] is True
+
+
+def test_generate_milling_pocket_gcode_has_gcode():
+    from cnc.server import generate_milling_pocket_gcode
+    result = generate_milling_pocket_gcode(**_POCKET_PARAMS)
+    assert "gcode" in result
+    assert len(result["gcode"]) > 0
+
+
+def test_generate_milling_pocket_gcode_m30():
+    from cnc.server import generate_milling_pocket_gcode
+    result = generate_milling_pocket_gcode(**_POCKET_PARAMS)
+    assert "M30" in result["gcode"]
+
+
+def test_generate_milling_pocket_gcode_machine_type():
+    from cnc.server import generate_milling_pocket_gcode
+    result = generate_milling_pocket_gcode(**_POCKET_PARAMS)
+    assert result["machine_type"] == "mill"
+
+
+def test_generate_milling_pocket_gcode_with_profile():
+    from cnc.server import generate_milling_pocket_gcode
+    result = generate_milling_pocket_gcode(
+        origin_x=0, origin_y=0, width=20, height=10,
+        depth=3, tool_diameter=5,
+        step_down=1, step_over=2,
+        feedrate=150, spindle_speed=3000,
+        machine_profile="generic_mill_mm",
+    )
+    assert result["ok"] is True
+    assert result["machine_profile"] == "generic_mill_mm"
+
+
+def test_generate_milling_pocket_gcode_missing_step_down_not_ok():
+    from cnc.server import generate_milling_pocket_gcode
+    result = generate_milling_pocket_gcode(
+        origin_x=0, origin_y=0, width=20, height=10,
+        depth=3, tool_diameter=5,
+        safe_z=5, feedrate=150, spindle_speed=3000,
+        step_down=None, step_over=2,
+    )
+    assert result["ok"] is False
+    assert result["gcode"] == ""
+
+
+def test_generate_milling_pocket_gcode_missing_step_over_not_ok():
+    from cnc.server import generate_milling_pocket_gcode
+    result = generate_milling_pocket_gcode(
+        origin_x=0, origin_y=0, width=20, height=10,
+        depth=3, tool_diameter=5,
+        safe_z=5, feedrate=150, spindle_speed=3000,
+        step_down=1, step_over=None,
+    )
+    assert result["ok"] is False
+    assert result["gcode"] == ""

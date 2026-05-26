@@ -71,6 +71,7 @@ Add the following to your Claude Desktop MCP configuration file.
 | `generate_drill_pattern_gcode` | **No** | Multi-hole drill pattern: holes list + optional profile → G-code (deterministic) |
 | `generate_milling_facing_gcode` | **No** | Rectangular facing: explicit geometry → G-code (deterministic, no cutter comp) |
 | `generate_milling_slot_gcode` | **No** | Straight slot along X or Y: explicit geometry → G-code (deterministic, no cutter comp) |
+| `generate_milling_pocket_gcode` | **No** | Rectangular pocket, raster clearing: explicit geometry → G-code (deterministic, no cutter comp) |
 | `generate_gcode` | Yes | Full agentic pipeline: prompt → G-code (requires API key) |
 
 ---
@@ -250,6 +251,37 @@ Returns the named profile or `{"ok": false, "profile": null, "error": "..."}` if
 - `depth` is a positive number (e.g. `3` → final cut at Z=-3). Negative values normalised with warning.
 - `machine_profile` (optional) — `"generic_mill_mm"` supplies `safe_z=5.0` if not provided.
 - Slot width equals tool diameter. No cutter compensation (G41/G42).
+- `postprocessor`: `"fanuc"` (default).
+- All output is deterministic and requires no API key. Review and simulate before use.
+
+---
+
+### generate_milling_pocket_gcode (deterministic, no API key needed)
+
+```json
+{
+  "origin_x": 0,
+  "origin_y": 0,
+  "width": 20,
+  "height": 10,
+  "depth": 3,
+  "tool_diameter": 5,
+  "step_down": 1,
+  "step_over": 2,
+  "safe_z": 5,
+  "feedrate": 150,
+  "spindle_speed": 3000,
+  "machine_profile": "generic_mill_mm"
+}
+```
+
+**Notes:**
+- `step_down` (required, > 0): Z increment per pass. Multiple passes until `target_z` is reached.
+- `step_over` (required, > 0): Radial step-over per raster row. Values > `tool_diameter` produce a warning about potential uncut material.
+- `depth` is a positive number (e.g. `3` → final cut at Z=-3). Negative values normalised with warning.
+- `machine_profile` (optional) — `"generic_mill_mm"` supplies `safe_z=5.0` if not provided.
+- Simple raster clearing — parallel rows along X, Y step-over. No helix-ramping, trochoidal toolpaths, or adaptive clearing.
+- No cutter compensation (G41/G42). No tool radius offset.
 - `postprocessor`: `"fanuc"` (default).
 - All output is deterministic and requires no API key. Review and simulate before use.
 

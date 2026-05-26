@@ -401,3 +401,82 @@ def test_slot_no_crash_missing_feedrate():
     gcode = _gen(plan)
     assert isinstance(gcode, str)
     assert "SKIPPED" in gcode or "NO FEEDRATE" in gcode
+
+
+# ---------------------------------------------------------------------------
+# G) Pocket operation
+# ---------------------------------------------------------------------------
+
+_POCKET_PLAN = {
+    "machine_type": "mill",
+    "units": "mm",
+    "work_coordinate_system": "G54",
+    "safe_z": 5.0,
+    "tools": [{"tool_number": 1, "name": "end mill 5mm", "diameter_mm": 5.0}],
+    "operations": [
+        {
+            "type": "pocket",
+            "name": "pocket_rect",
+            "tool_number": 1,
+            "parameters": {
+                "origin_x": 0.0,
+                "origin_y": 0.0,
+                "width": 20.0,
+                "height": 10.0,
+                "target_z": -3.0,
+                "step_down": 1.0,
+                "step_over": 2.0,
+                "tool_diameter": 5.0,
+            },
+            "feedrate": 150.0,
+            "spindle_speed": 3000.0,
+        }
+    ],
+    "assumptions": [],
+    "warnings": [],
+}
+
+
+def test_pocket_no_crash():
+    gcode = _gen(_POCKET_PLAN)
+    assert isinstance(gcode, str)
+
+
+def test_pocket_has_m30():
+    gcode = _gen(_POCKET_PLAN)
+    assert "M30" in gcode
+
+
+def test_pocket_has_spindle_start():
+    gcode = _gen(_POCKET_PLAN)
+    assert "M03" in gcode
+
+
+def test_pocket_three_z_passes_depth3_step1():
+    """depth=3, step_down=1 -> three Z passes at Z-1, Z-2, Z-3."""
+    gcode = _gen(_POCKET_PLAN)
+    assert "Z-1.000" in gcode
+    assert "Z-2.000" in gcode
+    assert "Z-3.000" in gcode
+
+
+def test_pocket_raster_rows_present():
+    """Raster rows should be present."""
+    gcode = _gen(_POCKET_PLAN)
+    assert "CUT ROW" in gcode
+
+
+def test_pocket_multiple_rows():
+    """height=10, step_over=2 -> at least 5 rows per Z pass."""
+    gcode = _gen(_POCKET_PLAN)
+    assert gcode.count("CUT ROW") >= 5
+
+
+def test_pocket_no_crash_missing_feedrate():
+    plan = {**_POCKET_PLAN}
+    op = {**_POCKET_PLAN["operations"][0]}
+    op.pop("feedrate", None)
+    plan = {**plan, "operations": [op]}
+    gcode = _gen(plan)
+    assert isinstance(gcode, str)
+    assert "SKIPPED" in gcode or "NO FEEDRATE" in gcode

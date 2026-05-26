@@ -148,6 +148,46 @@ python scripts/demo_milling_facing_mvp.py
 
 ---
 
+## Milling Pocket MVP
+
+The `generate_milling_pocket_gcode` MCP tool generates conservative rectangular
+pocket G-code without an LLM or API key.
+
+**Example parameters (MCP Inspector / Claude Desktop):**
+
+```json
+{
+  "origin_x": 0,
+  "origin_y": 0,
+  "width": 20,
+  "height": 10,
+  "depth": 3,
+  "tool_diameter": 5,
+  "step_down": 1,
+  "step_over": 2,
+  "safe_z": 5,
+  "feedrate": 150,
+  "spindle_speed": 3000,
+  "machine_profile": "generic_mill_mm"
+}
+```
+
+- `step_down`: Z increment per pass (required, > 0). Multiple Z passes until `depth` reached.
+- `step_over`: Radial step-over per raster row (required, > 0). Values > `tool_diameter` warn about uncut material.
+- `depth` is a positive number (e.g. `3` → final cut at Z=-3). Negative values normalised with warning.
+- Simple raster clearing strategy — parallel rows along X, stepping Y by `step_over`.
+- **No cutter compensation** (G41/G42) is applied automatically.
+- **No helix-ramping, trochoidal toolpaths, or adaptive clearing.**
+- Not a full CAM system — review and simulate before use on a real machine.
+
+**Run the milling pocket demo:**
+
+```bash
+python -m scripts.demo_milling_pocket_mvp
+```
+
+---
+
 ## Milling Slot MVP
 
 The `generate_milling_slot_gcode` MCP tool generates conservative straight-slot

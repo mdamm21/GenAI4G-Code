@@ -14,6 +14,9 @@ _MILL_SLOT_OP_TYPES = {"slot"}
 # Valid slot directions.
 _VALID_SLOT_DIRECTIONS = {"x", "y"}
 
+# Mill pocket operation types.
+_MILL_POCKET_OP_TYPES = {"pocket"}
+
 
 def validate_operation_plan(operation_plan: dict) -> dict:
     """Validate a structured operation plan dict.
@@ -240,6 +243,106 @@ def validate_operation_plan(operation_plan: dict) -> dict:
                     f"{op_label}: step_down ({step_down}) > total depth ({abs(target_z)}). "
                     "A single pass to target_z will be used."
                 )
+
+            # tool_diameter: required and > 0
+            td_val = params.get("tool_diameter")
+            if td_val is None:
+                errors.append(f"{op_label}: missing required parameter 'tool_diameter'.")
+            elif isinstance(td_val, (int, float)) and td_val <= 0:
+                errors.append(
+                    f"{op_label}: invalid parameter 'tool_diameter'={td_val} (must be > 0)."
+                )
+
+            # feedrate: error — G1 without F is unsafe
+            if not op.get("feedrate_mmpm") and not op.get("feedrate"):
+                errors.append(
+                    f"{op_label}: missing required 'feedrate' "
+                    "(G1 cutting move without feedrate is not safe)."
+                )
+
+            # spindle_speed: warning
+            if not op.get("spindle_rpm") and not op.get("spindle_speed"):
+                warnings.append(
+                    f"{op_label}: no spindle_speed/spindle_rpm specified. "
+                    "Spindle start (M03) will be skipped."
+                )
+
+    # --- Mill pocket-specific checks ---
+    if machine_type == "mill" and operations:
+        for i, op in enumerate(operations):
+            if not isinstance(op, dict):
+                continue
+            op_type = op.get("type", "")
+            if op_type not in _MILL_POCKET_OP_TYPES:
+                continue
+
+            op_label = f"Operation {i} (type='{op_type}')"
+            params = op.get("parameters", {})
+
+            # origin_x / origin_y: required (0 is valid -> use is None)
+            if params.get("origin_x") is None:
+                errors.append(f"{op_label}: missing required parameter 'origin_x'.")
+            if params.get("origin_y") is None:
+                errors.append(f"{op_label}: missing required parameter 'origin_y'.")
+
+            # width, height: required and > 0
+            for param_name in ("width", "height"):
+                val = params.get(param_name)
+                if val is None:
+                    errors.append(f"{op_label}: missing required parameter '{param_name}'.")
+                elif isinstance(val, (int, float)) and val <= 0:
+                    errors.append(
+                        f"{op_label}: invalid parameter '{param_name}'={val} (must be > 0)."
+                    )
+
+            # target_z: required and negative
+            target_z = params.get("target_z")
+            if target_z is None:
+                errors.append(f"{op_label}: missing required parameter 'target_z'.")
+            elif isinstance(target_z, (int, float)) and target_z >= 0:
+                errors.append(
+                    f"{op_label}: 'target_z'={target_z} is not negative. "
+                    "Cutting depth must be below Z=0."
+                )
+
+            # step_down: required and > 0
+            step_down = params.get("step_down")
+            if step_down is None:
+                errors.append(f"{op_label}: missing required parameter 'step_down'.")
+            elif isinstance(step_down, (int, float)) and step_down <= 0:
+                errors.append(
+                    f"{op_label}: invalid parameter 'step_down'={step_down} (must be > 0)."
+                )
+            elif (
+                isinstance(step_down, (int, float))
+                and isinstance(target_z, (int, float))
+                and step_down > abs(target_z)
+            ):
+                warnings.append(
+                    f"{op_label}: step_down ({step_down}) > total depth ({abs(target_z)}). "
+                    "A single pass to target_z will be used."
+                )
+
+            # step_over: required and > 0
+            step_over = params.get("step_over")
+            if step_over is None:
+                errors.append(f"{op_label}: missing required parameter 'step_over'.")
+            elif isinstance(step_over, (int, float)) and step_over <= 0:
+                errors.append(
+                    f"{op_label}: invalid parameter 'step_over'={step_over} (must be > 0)."
+                )
+            else:
+                td_val = params.get("tool_diameter")
+                if (
+                    isinstance(step_over, (int, float))
+                    and isinstance(td_val, (int, float))
+                    and td_val > 0
+                    and step_over > td_val
+                ):
+                    warnings.append(
+                        f"{op_label}: step_over ({step_over}) > tool_diameter ({td_val}). "
+                        "May leave uncut material."
+                    )
 
             # tool_diameter: required and > 0
             td_val = params.get("tool_diameter")
