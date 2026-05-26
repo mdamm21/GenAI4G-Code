@@ -45,7 +45,10 @@ from cnc.tools.drill_tools import (
     generate_drill_gcode_from_params,
     generate_drill_pattern_gcode_from_params,
 )
-from cnc.tools.milling_tools import generate_milling_facing_gcode_from_params
+from cnc.tools.milling_tools import (
+    generate_milling_facing_gcode_from_params,
+    generate_milling_slot_gcode_from_params,
+)
 from cnc.tools.machine_profiles import list_machine_profiles, get_machine_profile
 
 mcp = FastMCP("genai4g-cnc")
@@ -559,7 +562,107 @@ def generate_milling_facing_gcode(
 
 
 # ---------------------------------------------------------------------------
-# Tool 10: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
+# Tool 10: generate_milling_slot_gcode  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def generate_milling_slot_gcode(
+    start_x: float,
+    start_y: float,
+    length: float,
+    depth: float,
+    tool_diameter: float,
+    safe_z: float | None = None,
+    feedrate: float | None = None,
+    spindle_speed: float | None = None,
+    direction: str = "x",
+    step_down: float | None = None,
+    units: str = "mm",
+    work_coordinate_system: str = "G54",
+    material: str | None = None,
+    machine_profile: str | None = None,
+    postprocessor: str = "fanuc",
+) -> dict:
+    """Generate conservative milling slot G-code from explicit straight-slot parameters.
+
+    This deterministic tool does NOT use an LLM. It generates a straight slot
+    in multiple Z passes (step_down per pass) along the X or Y axis.
+
+    Slot width equals the tool diameter. No cutter compensation (G41/G42) is
+    applied. No ramp entry. This is a conservative MVP — review and simulate
+    before use on a real machine.
+
+    Args:
+        start_x: X start position of the slot centerline.
+        start_y: Y start position of the slot centerline.
+        length: Slot length along the chosen direction (must be > 0).
+        depth: Total cutting depth as a positive number (e.g. 3 → Z=-3).
+               Negative values are accepted and normalised with a warning.
+        tool_diameter: End mill diameter — also defines slot width (must be > 0).
+        safe_z: Safe retract height (positive). Profile default used if None.
+        feedrate: Cutting feedrate in units/min. Profile default used if None.
+        spindle_speed: Spindle RPM. If None, M03 is skipped.
+        direction: "x" (slot along X) or "y" (slot along Y).
+        step_down: Z depth increment per pass (must be > 0).
+                   If larger than total depth, a single pass is used.
+        units: "mm" (default) or "inch".
+        work_coordinate_system: WCS code (default "G54").
+        material: Optional material description for G-code header.
+        machine_profile: Optional built-in profile, e.g. "generic_mill_mm".
+        postprocessor: "fanuc" (default), "grbl", "marlin", or "linuxcnc".
+
+    Returns:
+        {
+          "ok": bool,
+          "machine_type": "mill",
+          "operation_plan": dict,
+          "gcode": str,
+          "validation": dict,
+          "warnings": list[str],
+          "errors": list[str],
+          "postprocessor": str,
+          "machine_profile": str | None,
+        }
+
+    Safety note:
+        Generated G-code is for review and simulation only.
+        Never run on a real machine without expert verification.
+    """
+    try:
+        return generate_milling_slot_gcode_from_params(
+            start_x=start_x,
+            start_y=start_y,
+            length=length,
+            depth=depth,
+            tool_diameter=tool_diameter,
+            safe_z=safe_z,
+            feedrate=feedrate,
+            spindle_speed=spindle_speed,
+            direction=direction,
+            step_down=step_down,
+            units=units,
+            work_coordinate_system=work_coordinate_system,
+            material=material,
+            machine_profile=machine_profile,
+            postprocessor=postprocessor,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "machine_type": "mill",
+            "operation_plan": {},
+            "gcode": "",
+            "validation": {"ok": False, "errors": [str(exc)], "warnings": []},
+            "warnings": [],
+            "errors": [f"generate_milling_slot_gcode: unexpected error: {exc}"],
+            "postprocessor": postprocessor,
+            "machine_profile": machine_profile,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tool 11: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
 # ---------------------------------------------------------------------------
 
 

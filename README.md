@@ -148,6 +148,44 @@ python scripts/demo_milling_facing_mvp.py
 
 ---
 
+## Milling Slot MVP
+
+The `generate_milling_slot_gcode` MCP tool generates conservative straight-slot
+G-code along X or Y without an LLM or API key.
+
+**Example parameters (MCP Inspector / Claude Desktop):**
+
+```json
+{
+  "start_x": 0,
+  "start_y": 0,
+  "length": 20,
+  "depth": 3,
+  "tool_diameter": 5,
+  "safe_z": 5,
+  "feedrate": 150,
+  "spindle_speed": 3000,
+  "direction": "x",
+  "step_down": 1,
+  "machine_profile": "generic_mill_mm"
+}
+```
+
+- `direction`: `"x"` or `"y"` — axis along which the slot is cut.
+- `step_down`: Z increment per pass (positive, in mm). Multiple passes if `depth > step_down`.
+- `depth` is a positive number (e.g. `3` → final cut at Z=-3). Negative values normalised with warning.
+- Slot width equals tool diameter — no cutter compensation, no roughing/finishing strategy.
+- **No cutter compensation** (G41/G42) is applied automatically.
+- Not a full CAM system — review and simulate before use on a real machine.
+
+**Run the milling slot demo:**
+
+```bash
+python scripts/demo_milling_slot_mvp.py
+```
+
+---
+
 ## Multi-Hole Drill Pattern MVP
 
 The `generate_drill_pattern_gcode` MCP tool generates conservative drilling

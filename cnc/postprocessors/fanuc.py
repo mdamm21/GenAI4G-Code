@@ -134,7 +134,9 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
                 lines.append("(WARNING: NO SPINDLE SPEED DEFINED — M03 SKIPPED)")
 
             # Operation-specific G-code
-            if op_type in ("facing",):
+            if op_type in ("slot",):
+                _append_slot(lines, op, feedrate, _safe_z)
+            elif op_type in ("facing",):
                 _append_facing(lines, op, feedrate, _safe_z)
             elif op_type in ("face_mill", "face"):
                 _append_face_mill(lines, op, feedrate, depth, _safe_z)
@@ -362,3 +364,107 @@ def _append_facing(
 
         y += so
         direction *= -1
+
+
+def _append_slot(
+    lines: list, op: dict, feedrate, safe_z: float | None
+) -> None:
+    """Generate conservative Fanuc slot moves for a straight groove.
+
+    Strategy: multiple Z passes (step_down per pass) from 0 to target_z.
+    Each pass: rapid to start XY at safe_z, plunge to current depth, cut to end, retract.
+
+    Safety rules:
+    - No G1 cutting move without feedrate.
+    - No motion without safe_z (skip with comment).
+    - No cutter compensation (G41/G42).
+    - Slot width equals tool diameter — no separate width passes.
+    - All parameters taken from operation.parameters.
+    """
+    params = op.get("parameters", {})
+
+    start_x = params.get("start_x")
+    start_y = params.get("start_y")
+    length = params.get("length")
+    target_z = params.get("target_z")
+    direction = params.get("direction")
+    step_down = params.get("step_down")
+    f = feedrate
+
+    # Safety: abort if any required parameter is missing
+    missing = [
+        name for name, val in [
+            ("start_x", start_x), ("start_y", start_y),
+            ("length", length), ("target_z", target_z),
+            ("direction", direction), ("step_down", step_down),
+        ]
+        if val is None
+    ]
+    if missing:
+        lines.append(
+            f"(SLOT SKIPPED — MISSING PARAMETERS: {', '.join(missing)})"
+        )
+        return
+
+    if f is None:
+        lines.append(
+            f"(SLOT SKIPPED — NO FEEDRATE DEFINED. "
+            f"WOULD MILL SLOT LENGTH {float(length):.3f} TO Z{float(target_z):.3f})"
+        )
+        return
+
+    if safe_z is None:
+        lines.append("(SLOT SKIPPED — SAFE Z NOT DEFINED)")
+        return
+
+    sx = float(start_x)
+    sy = float(start_y)
+    ll = float(length)
+    tz = float(target_z)
+    sd = float(step_down)
+    f_val = float(f)
+    dir_clean = str(direction).strip().lower()
+
+    # Ensure target_z is negative
+    if tz > 0:
+        tz = -tz
+        lines.append(f"(NOTE: target_z sign corrected to Z{tz:.3f})")
+
+    # Clamp step_down to total depth if larger (one pass)
+    if sd > abs(tz):
+        sd = abs(tz)
+
+    # Compute end position
+    if dir_clean == "x":
+        end_x = sx + ll
+        end_y = sy
+    else:  # "y"
+        end_x = sx
+        end_y = sy + ll
+
+    lines.append(
+        f"(SLOT: LENGTH={ll:.3f} ALONG {dir_clean.upper()}-AXIS "
+        f"FROM X{sx:.3f} Y{sy:.3f}, DEPTH Z{tz:.3f}, STEP-DOWN {sd:.3f})"
+    )
+    lines.append(
+        "(Slot width assumed equal to tool diameter; no cutter compensation applied)"
+    )
+
+    # Build Z levels for each pass
+    z_levels: list[float] = []
+    z_current = -sd
+    while z_current > tz + 1e-9:
+        z_levels.append(z_current)
+        z_current -= sd
+    z_levels.append(tz)  # always end at target depth
+
+    for pass_num, z_level in enumerate(z_levels, start=1):
+        lines.append(f"(PASS {pass_num} — Z{z_level:.3f})")
+        lines.append(f"G00 Z{safe_z:.3f} (RETRACT TO SAFE Z)")
+        lines.append(f"G00 X{sx:.3f} Y{sy:.3f} (RAPID TO SLOT START)")
+        lines.append(f"G01 Z{z_level:.3f} F{f_val:.3f} (PLUNGE TO DEPTH)")
+        if dir_clean == "x":
+            lines.append(f"G01 X{end_x:.3f} F{f_val:.3f} (CUT ALONG X)")
+        else:
+            lines.append(f"G01 Y{end_y:.3f} F{f_val:.3f} (CUT ALONG Y)")
+        lines.append(f"G00 Z{safe_z:.3f} (RETRACT AFTER PASS)")

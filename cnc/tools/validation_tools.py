@@ -8,6 +8,12 @@ _DRILL_OP_TYPES = {"drill", "drilling", "peck_drill", "bore", "ream"}
 # not subject to the new structured facing checks.
 _MILL_FACING_OP_TYPES = {"facing"}
 
+# Mill slot operation types.
+_MILL_SLOT_OP_TYPES = {"slot"}
+
+# Valid slot directions.
+_VALID_SLOT_DIRECTIONS = {"x", "y"}
+
 
 def validate_operation_plan(operation_plan: dict) -> dict:
     """Validate a structured operation plan dict.
@@ -164,6 +170,94 @@ def validate_operation_plan(operation_plan: dict) -> dict:
                 )
 
             # spindle_speed is a warning
+            if not op.get("spindle_rpm") and not op.get("spindle_speed"):
+                warnings.append(
+                    f"{op_label}: no spindle_speed/spindle_rpm specified. "
+                    "Spindle start (M03) will be skipped."
+                )
+
+    # --- Mill slot-specific checks ---
+    if machine_type == "mill" and operations:
+        for i, op in enumerate(operations):
+            if not isinstance(op, dict):
+                continue
+            op_type = op.get("type", "")
+            if op_type not in _MILL_SLOT_OP_TYPES:
+                continue
+
+            op_label = f"Operation {i} (type='{op_type}')"
+            params = op.get("parameters", {})
+
+            # start_x / start_y: required (0 is valid → use is None)
+            if params.get("start_x") is None:
+                errors.append(f"{op_label}: missing required parameter 'start_x'.")
+            if params.get("start_y") is None:
+                errors.append(f"{op_label}: missing required parameter 'start_y'.")
+
+            # length: required and > 0
+            length_val = params.get("length")
+            if length_val is None:
+                errors.append(f"{op_label}: missing required parameter 'length'.")
+            elif isinstance(length_val, (int, float)) and length_val <= 0:
+                errors.append(
+                    f"{op_label}: invalid parameter 'length'={length_val} (must be > 0)."
+                )
+
+            # target_z: required and negative
+            target_z = params.get("target_z")
+            if target_z is None:
+                errors.append(f"{op_label}: missing required parameter 'target_z'.")
+            elif isinstance(target_z, (int, float)) and target_z >= 0:
+                errors.append(
+                    f"{op_label}: 'target_z'={target_z} is not negative. "
+                    "Cutting depth must be below Z=0."
+                )
+
+            # direction: required, must be "x" or "y"
+            direction = params.get("direction")
+            if direction is None:
+                errors.append(f"{op_label}: missing required parameter 'direction'.")
+            elif str(direction).strip().lower() not in _VALID_SLOT_DIRECTIONS:
+                errors.append(
+                    f"{op_label}: invalid parameter 'direction'='{direction}'. "
+                    "Must be 'x' or 'y'."
+                )
+
+            # step_down: required and > 0
+            step_down = params.get("step_down")
+            if step_down is None:
+                errors.append(f"{op_label}: missing required parameter 'step_down'.")
+            elif isinstance(step_down, (int, float)) and step_down <= 0:
+                errors.append(
+                    f"{op_label}: invalid parameter 'step_down'={step_down} (must be > 0)."
+                )
+            elif (
+                isinstance(step_down, (int, float))
+                and isinstance(target_z, (int, float))
+                and step_down > abs(target_z)
+            ):
+                warnings.append(
+                    f"{op_label}: step_down ({step_down}) > total depth ({abs(target_z)}). "
+                    "A single pass to target_z will be used."
+                )
+
+            # tool_diameter: required and > 0
+            td_val = params.get("tool_diameter")
+            if td_val is None:
+                errors.append(f"{op_label}: missing required parameter 'tool_diameter'.")
+            elif isinstance(td_val, (int, float)) and td_val <= 0:
+                errors.append(
+                    f"{op_label}: invalid parameter 'tool_diameter'={td_val} (must be > 0)."
+                )
+
+            # feedrate: error — G1 without F is unsafe
+            if not op.get("feedrate_mmpm") and not op.get("feedrate"):
+                errors.append(
+                    f"{op_label}: missing required 'feedrate' "
+                    "(G1 cutting move without feedrate is not safe)."
+                )
+
+            # spindle_speed: warning
             if not op.get("spindle_rpm") and not op.get("spindle_speed"):
                 warnings.append(
                     f"{op_label}: no spindle_speed/spindle_rpm specified. "

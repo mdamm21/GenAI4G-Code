@@ -70,6 +70,7 @@ Add the following to your Claude Desktop MCP configuration file.
 | `generate_drill_gcode` | **No** | Single-hole drill pipeline: explicit params → G-code (deterministic) |
 | `generate_drill_pattern_gcode` | **No** | Multi-hole drill pattern: holes list + optional profile → G-code (deterministic) |
 | `generate_milling_facing_gcode` | **No** | Rectangular facing: explicit geometry → G-code (deterministic, no cutter comp) |
+| `generate_milling_slot_gcode` | **No** | Straight slot along X or Y: explicit geometry → G-code (deterministic, no cutter comp) |
 | `generate_gcode` | Yes | Full agentic pipeline: prompt → G-code (requires API key) |
 
 ---
@@ -221,6 +222,35 @@ Returns the named profile or `{"ok": false, "profile": null, "error": "..."}` if
 - No cutter compensation (G41/G42). No tool radius offset. Program the centerline path.
 - This is a conservative MVP — parallel X passes with Y step-over, not a full CAM algorithm.
 - `postprocessor`: `"fanuc"` (default). Other postprocessors produce comment placeholders for facing.
+- All output is deterministic and requires no API key. Review and simulate before use.
+
+---
+
+### generate_milling_slot_gcode (deterministic, no API key needed)
+
+```json
+{
+  "start_x": 0,
+  "start_y": 0,
+  "length": 20,
+  "depth": 3,
+  "tool_diameter": 5,
+  "safe_z": 5,
+  "feedrate": 150,
+  "spindle_speed": 3000,
+  "direction": "x",
+  "step_down": 1,
+  "machine_profile": "generic_mill_mm"
+}
+```
+
+**Notes:**
+- `direction`: `"x"` or `"y"`. Any other value returns `ok=false` with an error.
+- `step_down` (required, > 0): Z increment per pass. Multiple passes until `target_z` is reached.
+- `depth` is a positive number (e.g. `3` → final cut at Z=-3). Negative values normalised with warning.
+- `machine_profile` (optional) — `"generic_mill_mm"` supplies `safe_z=5.0` if not provided.
+- Slot width equals tool diameter. No cutter compensation (G41/G42).
+- `postprocessor`: `"fanuc"` (default).
 - All output is deterministic and requires no API key. Review and simulate before use.
 
 ---
