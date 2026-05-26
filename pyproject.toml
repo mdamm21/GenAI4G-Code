@@ -27,3 +27,7 @@ genai4g-server = "cnc.server:mcp.run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cnc"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

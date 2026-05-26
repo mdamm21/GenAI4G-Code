@@ -1,0 +1,158 @@
+# GENAI4G-CODE
+
+CNC G-code generation pipeline using Claude AI, MCP (Model Context Protocol), and a multi-agent architecture.
+
+---
+
+## Architecture
+
+```
+User Prompt
+    │
+    ▼
+cnc/server.py          ← MCP outer API (FastMCP tools)
+    │
+    ▼
+cnc/agent.py           ← CNC Supervisor Agent (Anthropic tool-use loop)
+    │
+    ├─ delegate_to_subagent
+    │       │
+    │       ├─ cnc/subagents/drilling.py   → OperationPlan
+    │       ├─ cnc/subagents/milling.py    → OperationPlan
+    │       └─ cnc/subagents/laser.py      → OperationPlan
+    │
+    ├─ validate_operation_plan (cnc/tools/validation_tools.py)
+    ├─ postprocess_operations  (cnc/postprocessors/fanuc|grbl|marlin|linuxcnc.py)
+    └─ validate_gcode_text     (cnc/validators/gcode_validator.py)
+```
+
+**Key design principles:**
+
+- MCP server is the **outer API only** — no CNC logic lives there.
+- Subagents produce **structured OperationPlans** — never raw G-code.
+- Postprocessors perform **deterministic, schema-driven** G-code generation.
+- Validators run on both plans and G-code before any output is returned.
+- Missing critical parameters produce `missing_info` / `warnings` — never silent fabrication.
+
+---
+
+## Current MVP: Drill Pipeline
+
+The deterministic drill pipeline is fully implemented and testable **without an LLM or API key**:
+
+1. `normalize_operation_plan` — maps agent field names to canonical schema
+2. `validate_operation_plan` — drill-specific error checks (x/y/z/feedrate required)
+3. `postprocess_operations` — Fanuc-compatible G-code with safety guards
+4. `validate_gcode_text` — static G-code safety analysis
+
+Supported postprocessors: `fanuc`, `grbl`, `marlin`, `linuxcnc`
+
+Supported machine types: `mill`, `drill`, `laser`, `lathe` (stub), `grinder` (stub), `3d_printer` (stub)
+
+---
+
+## Install
+
+```bash
+pip install -r requirements.txt
+```
+
+Requires Python >= 3.11.
+
+For LLM-backed agent features, set your API key:
+
+```bash
+# .env (copy from .env.example, never commit real keys)
+ANTHROPIC_API_KEY=your-key-here
+```
+
+---
+
+## Run tests
+
+```bash
+pytest
+```
+
+All deterministic tests run **without** an API key. LLM-dependent paths are not triggered by the test suite.
+
+---
+
+## Run deterministic demo (no API key needed)
+
+```bash
+python scripts/demo_drill_mvp.py
+```
+
+Demonstrates the full drill pipeline: normalize → validate → postprocess → G-code output.
+
+---
+
+## Run the full pipeline test
+
+```bash
+python scripts/test_drill_pipeline.py
+```
+
+---
+
+## Run the MCP server
+
+```bash
+python -m cnc.server
+```
+
+The server speaks the MCP stdio protocol. Use with an MCP client or the MCP Inspector.
+
+See [docs/mcp_setup.md](docs/mcp_setup.md) for Claude Desktop and Inspector configuration.
+
+---
+
+## Run the local agent test client (requires API key)
+
+```bash
+python agent.py
+# or with a custom prompt:
+python agent.py "Drill a 5mm hole at X10 Y20 to a depth of 15mm in aluminium"
+```
+
+---
+
+## Project structure
+
+```
+GenAI4G-Code/
+├── agent.py                    # Local test client (not for production)
+├── requirements.txt
+├── pyproject.toml
+├── cnc/
+│   ├── server.py               # MCP server (outer API)
+│   ├── agent.py                # CNC Supervisor Agent (orchestrator)
+│   ├── subagents/              # Machine-specific planning agents
+│   ├── tools/                  # Validation, postprocessing, normalization
+│   ├── validators/             # Static G-code safety checks
+│   ├── postprocessors/         # Fanuc, GRBL, Marlin, LinuxCNC
+│   └── schemas/                # Pydantic data models
+├── scripts/
+│   ├── demo_drill_mvp.py       # Deterministic demo (no LLM needed)
+│   └── test_drill_pipeline.py  # End-to-end pipeline test
+├── tests/                      # pytest test suite
+└── docs/
+    └── mcp_setup.md            # MCP Inspector & Claude Desktop setup
+```
+
+---
+
+## Safety note
+
+> **Generated G-code is for review and simulation only.**
+>
+> Never run generated G-code on a real CNC machine without:
+> - Expert review by a qualified machinist or CNC programmer
+> - Simulation in CAM software or a G-code simulator
+> - Machine-specific setup validation (tool offsets, work offsets, feeds/speeds)
+> - Appropriate safety checks and limit verification
+>
+> The system deliberately refuses to silently invent critical machining parameters.
+> Missing information is reported as `missing_info` or `warnings` rather than
+> substituted with potentially unsafe defaults.
