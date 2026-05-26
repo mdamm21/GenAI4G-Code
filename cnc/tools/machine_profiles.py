@@ -20,6 +20,34 @@ import copy
 # ---------------------------------------------------------------------------
 
 _PROFILES: dict[str, dict] = {
+    "generic_mill_mm": {
+        "name": "generic_mill_mm",
+        "machine_type": "mill",
+        "units": "mm",
+        "work_coordinate_system": "G54",
+        "default_safe_z": 5.0,
+        "default_feedrate": None,
+        "default_spindle_speed": None,
+        "default_postprocessor": "fanuc",
+        "notes": [
+            "Generic metric milling profile.",
+            "Feedrate, spindle speed, tool diameter and cutting parameters must be provided per job.",
+        ],
+    },
+    "generic_mill_inch": {
+        "name": "generic_mill_inch",
+        "machine_type": "mill",
+        "units": "inch",
+        "work_coordinate_system": "G54",
+        "default_safe_z": 0.2,
+        "default_feedrate": None,
+        "default_spindle_speed": None,
+        "default_postprocessor": "fanuc",
+        "notes": [
+            "Generic inch milling profile.",
+            "Feedrate, spindle speed, tool diameter and cutting parameters must be provided per job.",
+        ],
+    },
     "generic_drill_mm": {
         "name": "generic_drill_mm",
         "machine_type": "drill",

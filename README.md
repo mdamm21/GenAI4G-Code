@@ -110,6 +110,44 @@ Compared to `generate_gcode(prompt=...)`:
 
 ---
 
+## Milling Facing MVP
+
+The `generate_milling_facing_gcode` MCP tool generates conservative facing
+(surface milling) G-code for a **rectangular area** without an LLM or API key.
+
+**Example parameters (MCP Inspector / Claude Desktop):**
+
+```json
+{
+  "origin_x": 0,
+  "origin_y": 0,
+  "width": 20,
+  "height": 10,
+  "depth": 1,
+  "step_over": 2,
+  "tool_diameter": 5,
+  "safe_z": 5,
+  "feedrate": 150,
+  "spindle_speed": 3000,
+  "machine_profile": "generic_mill_mm"
+}
+```
+
+- Generates alternating parallel passes along X, stepping Y by `step_over`.
+- `depth` is a positive number (e.g. `1` → cuts to Z=-1).
+- **No cutter compensation** (G41/G42) is applied automatically.
+- **No tool radius offset** is calculated — program the centerline.
+- Not a full CAM system — complex geometries require dedicated CAM software.
+- All output must be reviewed and simulated before use on a real machine.
+
+**Run the milling facing demo:**
+
+```bash
+python scripts/demo_milling_facing_mvp.py
+```
+
+---
+
 ## Multi-Hole Drill Pattern MVP
 
 The `generate_drill_pattern_gcode` MCP tool generates conservative drilling

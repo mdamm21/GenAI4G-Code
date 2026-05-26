@@ -134,7 +134,9 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
                 lines.append("(WARNING: NO SPINDLE SPEED DEFINED — M03 SKIPPED)")
 
             # Operation-specific G-code
-            if op_type in ("face_mill", "face"):
+            if op_type in ("facing",):
+                _append_facing(lines, op, feedrate, _safe_z)
+            elif op_type in ("face_mill", "face"):
                 _append_face_mill(lines, op, feedrate, depth, _safe_z)
             elif op_type in ("pocket", "pocket_mill"):
                 _append_pocket(lines, op, feedrate, depth, _safe_z)
@@ -270,3 +272,93 @@ def _append_drill(
     else:
         lines.append("(DRILL: NO HOLE COORDINATES PROVIDED — SKIPPING DRILL MOVE)")
         lines.append(f"(WOULD DRILL TO Z{z_cut:.3f} F{f_val:.3f} IF COORDINATES WERE GIVEN)")
+
+
+def _append_facing(
+    lines: list, op: dict, feedrate, safe_z: float | None
+) -> None:
+    """Generate conservative Fanuc facing moves for a rectangular area.
+
+    Strategy: alternating parallel passes along X, stepping Y by step_over.
+    Each pass retracts to safe_z between rows — conservative but safe.
+
+    Safety rules:
+    - No G1 cutting move without feedrate.
+    - No motion without safe_z (commented out with warning).
+    - No cutter compensation (G41/G42) applied.
+    - All parameters taken from operation.parameters.
+    """
+    params = op.get("parameters", {})
+
+    origin_x = params.get("origin_x")
+    origin_y = params.get("origin_y")
+    width = params.get("width")
+    height = params.get("height")
+    target_z = params.get("target_z")
+    step_over = params.get("step_over")
+    f = feedrate
+
+    # Safety: abort if any required parameter is missing
+    missing = [
+        name for name, val in [
+            ("origin_x", origin_x), ("origin_y", origin_y),
+            ("width", width), ("height", height),
+            ("target_z", target_z), ("step_over", step_over),
+        ]
+        if val is None
+    ]
+    if missing:
+        lines.append(
+            f"(FACING SKIPPED — MISSING PARAMETERS: {', '.join(missing)})"
+        )
+        return
+
+    if f is None:
+        lines.append(
+            f"(FACING SKIPPED — NO FEEDRATE DEFINED. "
+            f"WOULD FACE {float(width):.3f}x{float(height):.3f} TO Z{float(target_z):.3f})"
+        )
+        return
+
+    if safe_z is None:
+        lines.append("(FACING SKIPPED — SAFE Z NOT DEFINED)")
+        return
+
+    ox = float(origin_x)
+    oy = float(origin_y)
+    w = float(width)
+    h = float(height)
+    tz = float(target_z)
+    so = float(step_over)
+    f_val = float(f)
+
+    # Ensure target_z is negative
+    if tz > 0:
+        tz = -tz
+        lines.append(f"(NOTE: target_z sign corrected to Z{tz:.3f})")
+
+    lines.append(
+        f"(FACING: {w:.3f}x{h:.3f} AREA FROM X{ox:.3f} Y{oy:.3f}, "
+        f"DEPTH Z{tz:.3f}, STEP-OVER {so:.3f})"
+    )
+    lines.append("(NOTE: NO CUTTER COMPENSATION — REVIEW PATHS BEFORE USE)")
+
+    y = oy
+    direction = 1  # 1 = left-to-right, -1 = right-to-left
+    pass_num = 0
+
+    while y <= oy + h + 1e-9:  # 1e-9 tolerance for float rounding
+        pass_num += 1
+        x_start = ox if direction == 1 else ox + w
+        x_end = ox + w if direction == 1 else ox
+        dir_label = "L>R" if direction == 1 else "R>L"
+
+        lines.append(f"(PASS {pass_num} — Y{y:.3f} — {dir_label})")
+        lines.append(f"G00 Z{safe_z:.3f} (RETRACT TO SAFE Z)")
+        lines.append(f"G00 X{x_start:.3f} Y{y:.3f} (RAPID TO PASS START)")
+        lines.append(f"G01 Z{tz:.3f} F{f_val:.3f} (PLUNGE TO CUTTING DEPTH)")
+        lines.append(f"G01 X{x_end:.3f} F{f_val:.3f} (CUT PASS)")
+        lines.append(f"G00 Z{safe_z:.3f} (RETRACT AFTER PASS)")
+
+        y += so
+        direction *= -1

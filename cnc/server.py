@@ -45,6 +45,7 @@ from cnc.tools.drill_tools import (
     generate_drill_gcode_from_params,
     generate_drill_pattern_gcode_from_params,
 )
+from cnc.tools.milling_tools import generate_milling_facing_gcode_from_params
 from cnc.tools.machine_profiles import list_machine_profiles, get_machine_profile
 
 mcp = FastMCP("genai4g-cnc")
@@ -459,7 +460,106 @@ def generate_drill_pattern_gcode(
 
 
 # ---------------------------------------------------------------------------
-# Tool 9: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
+# Tool 9: generate_milling_facing_gcode  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def generate_milling_facing_gcode(
+    origin_x: float,
+    origin_y: float,
+    width: float,
+    height: float,
+    depth: float,
+    step_over: float,
+    tool_diameter: float,
+    safe_z: float | None = None,
+    feedrate: float | None = None,
+    spindle_speed: float | None = None,
+    units: str = "mm",
+    work_coordinate_system: str = "G54",
+    material: str | None = None,
+    machine_profile: str | None = None,
+    postprocessor: str = "fanuc",
+) -> dict:
+    """Generate conservative milling facing G-code from explicit rectangular facing parameters.
+
+    This deterministic tool does NOT use an LLM. It generates parallel X-axis
+    passes across a rectangular area, stepping in Y by step_over per pass.
+
+    No cutter compensation (G41/G42) is applied. No tool radius offset is
+    calculated automatically. The output is a conservative MVP — review and
+    simulate before use on a real machine.
+
+    Args:
+        origin_x: X coordinate of the lower-left corner of the facing area.
+        origin_y: Y coordinate of the lower-left corner of the facing area.
+        width: Width of the facing area along X (must be > 0).
+        height: Height of the facing area along Y (must be > 0).
+        depth: Cutting depth as a positive number (e.g. 1 → cuts to Z=-1).
+               Negative values are accepted and normalised with a warning.
+        step_over: Y step-over distance per pass (must be > 0).
+        tool_diameter: End mill diameter (must be > 0).
+        safe_z: Safe retract height (positive). Profile default used if None.
+        feedrate: Cutting feedrate in units/min. Profile default used if None.
+        spindle_speed: Spindle RPM. If None, M03 is skipped.
+        units: "mm" (default) or "inch".
+        work_coordinate_system: WCS code (default "G54").
+        material: Optional material description for G-code header.
+        machine_profile: Optional built-in profile, e.g. "generic_mill_mm".
+        postprocessor: "fanuc" (default), "grbl", "marlin", or "linuxcnc".
+
+    Returns:
+        {
+          "ok": bool,
+          "machine_type": "mill",
+          "operation_plan": dict,
+          "gcode": str,
+          "validation": dict,
+          "warnings": list[str],
+          "errors": list[str],
+          "postprocessor": str,
+          "machine_profile": str | None,
+        }
+
+    Safety note:
+        Generated G-code is for review and simulation only.
+        Never run on a real machine without expert verification.
+    """
+    try:
+        return generate_milling_facing_gcode_from_params(
+            origin_x=origin_x,
+            origin_y=origin_y,
+            width=width,
+            height=height,
+            depth=depth,
+            step_over=step_over,
+            tool_diameter=tool_diameter,
+            safe_z=safe_z,
+            feedrate=feedrate,
+            spindle_speed=spindle_speed,
+            units=units,
+            work_coordinate_system=work_coordinate_system,
+            material=material,
+            machine_profile=machine_profile,
+            postprocessor=postprocessor,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "machine_type": "mill",
+            "operation_plan": {},
+            "gcode": "",
+            "validation": {"ok": False, "errors": [str(exc)], "warnings": []},
+            "warnings": [],
+            "errors": [f"generate_milling_facing_gcode: unexpected error: {exc}"],
+            "postprocessor": postprocessor,
+            "machine_profile": machine_profile,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tool 10: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
 # ---------------------------------------------------------------------------
 
 

@@ -251,3 +251,77 @@ def test_milling_face_mill_still_works(valid_mill_plan):
     assert "G90" in gcode
     assert "M30" in gcode
     assert "G01" in gcode or "G1 " in gcode
+
+
+# ---------------------------------------------------------------------------
+# F) Facing operation — rectangular passes
+# ---------------------------------------------------------------------------
+
+_FACING_PLAN = {
+    "machine_type": "mill",
+    "units": "mm",
+    "work_coordinate_system": "G54",
+    "safe_z": 5.0,
+    "tools": [{"id": "T1", "name": "5mm end mill", "diameter": 5.0}],
+    "operations": [
+        {
+            "type": "facing",
+            "description": "Face 20x10 area",
+            "tool_id": "T1",
+            "parameters": {
+                "origin_x": 0.0,
+                "origin_y": 0.0,
+                "width": 20.0,
+                "height": 10.0,
+                "target_z": -1.0,
+                "step_over": 4.0,
+                "tool_diameter": 5.0,
+            },
+            "feedrate": 150.0,
+            "spindle_speed": 3000.0,
+        }
+    ],
+    "assumptions": [],
+    "warnings": [],
+}
+
+
+def test_facing_no_crash():
+    gcode = _gen(_FACING_PLAN)
+    assert isinstance(gcode, str)
+
+
+def test_facing_has_m30():
+    gcode = _gen(_FACING_PLAN)
+    assert "M30" in gcode
+
+
+def test_facing_has_spindle_start():
+    gcode = _gen(_FACING_PLAN)
+    assert "M03" in gcode
+
+
+def test_facing_has_g1_x_moves():
+    gcode = _gen(_FACING_PLAN)
+    assert "G01 X" in gcode
+
+
+def test_facing_has_negative_z():
+    gcode = _gen(_FACING_PLAN)
+    assert "Z-1.000" in gcode
+
+
+def test_facing_multiple_y_passes():
+    # height=10, step_over=4 → should generate at least 3 passes
+    gcode = _gen(_FACING_PLAN)
+    assert gcode.count("G01 X") >= 3
+
+
+def test_facing_no_crash_missing_feedrate():
+    plan = {**_FACING_PLAN}
+    op = {**_FACING_PLAN["operations"][0]}
+    op.pop("feedrate", None)
+    plan = {**plan, "operations": [op]}
+    gcode = _gen(plan)  # must not raise
+    assert isinstance(gcode, str)
+    assert "SKIPPED" in gcode or "NO FEEDRATE" in gcode

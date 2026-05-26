@@ -69,6 +69,7 @@ Add the following to your Claude Desktop MCP configuration file.
 | `postprocess_plan` | No | Convert an OperationPlan to G-code (deterministic) |
 | `generate_drill_gcode` | **No** | Single-hole drill pipeline: explicit params → G-code (deterministic) |
 | `generate_drill_pattern_gcode` | **No** | Multi-hole drill pattern: holes list + optional profile → G-code (deterministic) |
+| `generate_milling_facing_gcode` | **No** | Rectangular facing: explicit geometry → G-code (deterministic, no cutter comp) |
 | `generate_gcode` | Yes | Full agentic pipeline: prompt → G-code (requires API key) |
 
 ---
@@ -193,6 +194,34 @@ Returns the named profile or `{"ok": false, "profile": null, "error": "..."}` if
 - Spindle starts once and stays running while drilling holes at the same speed.
 - `postprocessor`: `"fanuc"` (default), `"grbl"`, `"marlin"`, or `"linuxcnc"`.
 - Machine profiles are defaults, not safety guarantees. Always review before machine use.
+
+---
+
+### generate_milling_facing_gcode (deterministic, no API key needed)
+
+```json
+{
+  "origin_x": 0,
+  "origin_y": 0,
+  "width": 20,
+  "height": 10,
+  "depth": 1,
+  "step_over": 2,
+  "tool_diameter": 5,
+  "safe_z": 5,
+  "feedrate": 150,
+  "spindle_speed": 3000,
+  "machine_profile": "generic_mill_mm"
+}
+```
+
+**Notes:**
+- `depth` is a positive number (e.g. `1` → cuts to Z=-1). Negative values normalised with warning.
+- `machine_profile` (optional) — `"generic_mill_mm"` supplies `safe_z=5.0` if not provided.
+- No cutter compensation (G41/G42). No tool radius offset. Program the centerline path.
+- This is a conservative MVP — parallel X passes with Y step-over, not a full CAM algorithm.
+- `postprocessor`: `"fanuc"` (default). Other postprocessors produce comment placeholders for facing.
+- All output is deterministic and requires no API key. Review and simulate before use.
 
 ---
 

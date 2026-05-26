@@ -3,6 +3,11 @@
 # Drill operation types that require complete x/y/z/feedrate parameters.
 _DRILL_OP_TYPES = {"drill", "drilling", "peck_drill", "bore", "ream"}
 
+# Mill facing operation types — the structured typed "facing" op only.
+# Legacy "face_mill" and "face" types use a different parameter schema and are
+# not subject to the new structured facing checks.
+_MILL_FACING_OP_TYPES = {"facing"}
+
 
 def validate_operation_plan(operation_plan: dict) -> dict:
     """Validate a structured operation plan dict.
@@ -101,6 +106,64 @@ def validate_operation_plan(operation_plan: dict) -> dict:
                 )
 
             # spindle_speed is a warning — can drill without spindle cmd but unusual
+            if not op.get("spindle_rpm") and not op.get("spindle_speed"):
+                warnings.append(
+                    f"{op_label}: no spindle_speed/spindle_rpm specified. "
+                    "Spindle start (M03) will be skipped."
+                )
+
+    # --- Mill-specific checks ---
+    if machine_type == "mill" and operations:
+        for i, op in enumerate(operations):
+            if not isinstance(op, dict):
+                continue
+            op_type = op.get("type", "")
+            if op_type not in _MILL_FACING_OP_TYPES:
+                # Not a facing-type operation — skip facing-specific checks
+                continue
+
+            op_label = f"Operation {i} (type='{op_type}')"
+            params = op.get("parameters", {})
+
+            # origin_x / origin_y: required (0 is valid → use is None check)
+            if params.get("origin_x") is None:
+                errors.append(
+                    f"{op_label}: missing required parameter 'origin_x'."
+                )
+            if params.get("origin_y") is None:
+                errors.append(
+                    f"{op_label}: missing required parameter 'origin_y'."
+                )
+
+            # width, height, step_over, tool_diameter: required and positive
+            for param_name in ("width", "height", "step_over", "tool_diameter"):
+                val = params.get(param_name)
+                if val is None:
+                    errors.append(f"{op_label}: missing required parameter '{param_name}'.")
+                elif isinstance(val, (int, float)) and val <= 0:
+                    errors.append(
+                        f"{op_label}: invalid parameter '{param_name}'={val} "
+                        "(must be > 0)."
+                    )
+
+            # target_z: required (0 is invalid for a cutting depth)
+            target_z = params.get("target_z")
+            if target_z is None:
+                errors.append(f"{op_label}: missing required parameter 'target_z'.")
+            elif isinstance(target_z, (int, float)) and target_z >= 0:
+                errors.append(
+                    f"{op_label}: 'target_z'={target_z} is not negative. "
+                    "Cutting depth must be below Z=0."
+                )
+
+            # feedrate is an error — G1 cutting without F is illegal
+            if not op.get("feedrate_mmpm") and not op.get("feedrate"):
+                errors.append(
+                    f"{op_label}: missing required 'feedrate' "
+                    "(G1 cutting move without feedrate is not safe)."
+                )
+
+            # spindle_speed is a warning
             if not op.get("spindle_rpm") and not op.get("spindle_speed"):
                 warnings.append(
                     f"{op_label}: no spindle_speed/spindle_rpm specified. "

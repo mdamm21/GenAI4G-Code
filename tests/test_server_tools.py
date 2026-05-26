@@ -395,3 +395,73 @@ def test_generate_drill_pattern_gcode_missing_feedrate_not_ok():
     )
     assert result["ok"] is False
     assert result["gcode"] == ""
+
+
+# ---------------------------------------------------------------------------
+# J) generate_milling_facing_gcode
+# ---------------------------------------------------------------------------
+
+_FACING_PARAMS = dict(
+    origin_x=0, origin_y=0, width=20, height=10,
+    depth=1, step_over=2, tool_diameter=5,
+    safe_z=5, feedrate=150, spindle_speed=3000,
+)
+
+
+def test_generate_milling_facing_gcode_importable():
+    from cnc.server import generate_milling_facing_gcode
+    assert callable(generate_milling_facing_gcode)
+
+
+def test_generate_milling_facing_gcode_returns_dict():
+    from cnc.server import generate_milling_facing_gcode
+    result = generate_milling_facing_gcode(**_FACING_PARAMS)
+    assert isinstance(result, dict)
+
+
+def test_generate_milling_facing_gcode_ok():
+    from cnc.server import generate_milling_facing_gcode
+    result = generate_milling_facing_gcode(**_FACING_PARAMS)
+    assert result["ok"] is True
+
+
+def test_generate_milling_facing_gcode_has_gcode():
+    from cnc.server import generate_milling_facing_gcode
+    result = generate_milling_facing_gcode(**_FACING_PARAMS)
+    assert "gcode" in result
+    assert len(result["gcode"]) > 0
+
+
+def test_generate_milling_facing_gcode_m30():
+    from cnc.server import generate_milling_facing_gcode
+    result = generate_milling_facing_gcode(**_FACING_PARAMS)
+    assert "M30" in result["gcode"]
+
+
+def test_generate_milling_facing_gcode_machine_type():
+    from cnc.server import generate_milling_facing_gcode
+    result = generate_milling_facing_gcode(**_FACING_PARAMS)
+    assert result["machine_type"] == "mill"
+
+
+def test_generate_milling_facing_gcode_with_profile():
+    from cnc.server import generate_milling_facing_gcode
+    result = generate_milling_facing_gcode(
+        origin_x=0, origin_y=0, width=20, height=10,
+        depth=1, step_over=2, tool_diameter=5,
+        feedrate=150, spindle_speed=3000,
+        machine_profile="generic_mill_mm",
+    )
+    assert result["ok"] is True
+    assert result["machine_profile"] == "generic_mill_mm"
+
+
+def test_generate_milling_facing_gcode_missing_feedrate_not_ok():
+    from cnc.server import generate_milling_facing_gcode
+    result = generate_milling_facing_gcode(
+        origin_x=0, origin_y=0, width=20, height=10,
+        depth=1, step_over=2, tool_diameter=5,
+        safe_z=5, feedrate=None, spindle_speed=3000,
+    )
+    assert result["ok"] is False
+    assert result["gcode"] == ""
