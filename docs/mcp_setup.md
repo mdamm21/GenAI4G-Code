@@ -62,10 +62,13 @@ Add the following to your Claude Desktop MCP configuration file.
 | Tool | LLM needed | Description |
 |---|---|---|
 | `list_supported_machines` | No | Returns supported machine type identifiers |
+| `list_profiles` | No | Returns all built-in machine profiles |
+| `get_profile` | No | Returns a single machine profile by name |
 | `validate_gcode` | No | Static safety check on a G-code program |
 | `validate_plan` | No | Structural validation of an OperationPlan dict |
 | `postprocess_plan` | No | Convert an OperationPlan to G-code (deterministic) |
-| `generate_drill_gcode` | **No** | Typed drill pipeline: explicit params → G-code (MVP, deterministic) |
+| `generate_drill_gcode` | **No** | Single-hole drill pipeline: explicit params → G-code (deterministic) |
+| `generate_drill_pattern_gcode` | **No** | Multi-hole drill pattern: holes list + optional profile → G-code (deterministic) |
 | `generate_gcode` | Yes | Full agentic pipeline: prompt → G-code (requires API key) |
 
 ---
@@ -142,6 +145,54 @@ The recommended starting point. Supply explicit machining parameters — no LLM 
   "machine_type": "drill"
 }
 ```
+
+---
+
+### list_profiles (deterministic, no API key needed)
+
+```json
+{}
+```
+
+Returns all built-in machine profiles with their defaults.
+
+---
+
+### get_profile (deterministic, no API key needed)
+
+```json
+{
+  "name": "generic_drill_mm"
+}
+```
+
+Returns the named profile or `{"ok": false, "profile": null, "error": "..."}` if unknown.
+
+---
+
+### generate_drill_pattern_gcode (deterministic, no API key needed)
+
+```json
+{
+  "holes": [
+    {"x": 0, "y": 0, "depth": 5},
+    {"x": 10, "y": 0, "depth": 5},
+    {"x": 10, "y": 10, "depth": 8}
+  ],
+  "tool_diameter": 5,
+  "feedrate": 100,
+  "spindle_speed": 1200,
+  "machine_profile": "generic_drill_mm"
+}
+```
+
+**Notes:**
+- Each `hole` requires `x`, `y`, `depth` (positive depth → Z negative).
+- `machine_profile` is optional. When supplied, its `default_safe_z` fills in `safe_z` if not provided.
+- `feedrate` and `spindle_speed` are **never invented** — missing values produce errors or warnings.
+- Spindle starts once and stays running while drilling holes at the same speed.
+- `postprocessor`: `"fanuc"` (default), `"grbl"`, `"marlin"`, or `"linuxcnc"`.
+- Machine profiles are defaults, not safety guarantees. Always review before machine use.
 
 ---
 

@@ -41,7 +41,11 @@ except ImportError as exc:
 from cnc.tools.postprocess_tools import postprocess_operations
 from cnc.tools.validation_tools import validate_operation_plan
 from cnc.validators.gcode_validator import validate_gcode_text
-from cnc.tools.drill_tools import generate_drill_gcode_from_params
+from cnc.tools.drill_tools import (
+    generate_drill_gcode_from_params,
+    generate_drill_pattern_gcode_from_params,
+)
+from cnc.tools.machine_profiles import list_machine_profiles, get_machine_profile
 
 mcp = FastMCP("genai4g-cnc")
 
@@ -323,7 +327,139 @@ def generate_drill_gcode(
 
 
 # ---------------------------------------------------------------------------
-# Tool 6: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
+# Tool 6: list_profiles  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_profiles() -> list[dict]:
+    """List all available built-in machine profiles.
+
+    Returns:
+        List of machine profile dicts, each with: name, machine_type, units,
+        work_coordinate_system, default_safe_z, default_feedrate,
+        default_spindle_speed, default_postprocessor, notes.
+    """
+    return list_machine_profiles()
+
+
+# ---------------------------------------------------------------------------
+# Tool 7: get_profile  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_profile(name: str) -> dict:
+    """Get a built-in machine profile by name.
+
+    Args:
+        name: Profile name, e.g. "generic_drill_mm" or "generic_drill_inch".
+
+    Returns:
+        Dict with keys: ok, profile (or None if not found), error (on failure).
+    """
+    profile = get_machine_profile(name)
+    if profile is None:
+        return {
+            "ok": False,
+            "error": f"Unknown machine profile: {name!r}. "
+                     "Use list_profiles() to see available profiles.",
+            "profile": None,
+        }
+    return {
+        "ok": True,
+        "profile": profile,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tool 8: generate_drill_pattern_gcode  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def generate_drill_pattern_gcode(
+    holes: list[dict],
+    tool_diameter: float,
+    safe_z: float | None = None,
+    feedrate: float | None = None,
+    spindle_speed: float | None = None,
+    units: str = "mm",
+    work_coordinate_system: str = "G54",
+    material: str | None = None,
+    machine_profile: str | None = None,
+    postprocessor: str = "fanuc",
+) -> dict:
+    """Generate conservative drilling G-code for multiple explicit hole positions.
+
+    This deterministic tool does NOT use an LLM. It accepts a list of hole
+    coordinates, builds a structured OperationPlan, validates the plan, runs
+    the named postprocessor to produce G-code, and validates the G-code.
+
+    If a machine_profile is supplied, its defaults (safe_z, feedrate,
+    spindle_speed) fill in any missing job parameters. Feedrate and spindle
+    speed are never invented — missing values produce clear warnings or errors.
+
+    Args:
+        holes: List of hole dicts, each with keys ``x``, ``y``, ``depth``
+               (depth as a positive number, e.g. 5 → drills to Z=-5).
+        tool_diameter: Drill bit diameter (in units).
+        safe_z: Safe retract height (positive). If None, the machine_profile
+                default is used if available; missing safe_z is a plan error.
+        feedrate: Drill feedrate in units/min. If None, profile default is used.
+        spindle_speed: Spindle RPM. If None, M03 is skipped.
+        units: "mm" (default) or "inch".
+        work_coordinate_system: WCS code (default "G54").
+        material: Optional material description for G-code header.
+        machine_profile: Optional built-in profile name, e.g. "generic_drill_mm".
+        postprocessor: "fanuc" (default), "grbl", "marlin", or "linuxcnc".
+
+    Returns:
+        {
+          "ok": bool,
+          "machine_type": "drill",
+          "operation_plan": dict,
+          "gcode": str,
+          "validation": dict,
+          "warnings": list[str],
+          "errors": list[str],
+          "postprocessor": str,
+          "machine_profile": str | None,
+        }
+
+    Safety note:
+        Generated G-code is for review and simulation only.
+        Never run on a real machine without expert verification.
+    """
+    try:
+        return generate_drill_pattern_gcode_from_params(
+            holes=holes,
+            tool_diameter=tool_diameter,
+            safe_z=safe_z,
+            feedrate=feedrate,
+            spindle_speed=spindle_speed,
+            units=units,
+            work_coordinate_system=work_coordinate_system,
+            material=material,
+            machine_profile=machine_profile,
+            postprocessor=postprocessor,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "machine_type": "drill",
+            "operation_plan": {},
+            "gcode": "",
+            "validation": {"ok": False, "errors": [str(exc)], "warnings": []},
+            "warnings": [],
+            "errors": [f"generate_drill_pattern_gcode: unexpected error: {exc}"],
+            "postprocessor": postprocessor,
+            "machine_profile": machine_profile,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tool 9: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
 # ---------------------------------------------------------------------------
 
 

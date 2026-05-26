@@ -110,6 +110,54 @@ Compared to `generate_gcode(prompt=...)`:
 
 ---
 
+## Multi-Hole Drill Pattern MVP
+
+The `generate_drill_pattern_gcode` MCP tool generates conservative drilling
+G-code for **multiple explicit hole positions** without an LLM or API key.
+
+**Example parameters (MCP Inspector / Claude Desktop):**
+
+```json
+{
+  "holes": [
+    {"x": 0, "y": 0, "depth": 5},
+    {"x": 10, "y": 0, "depth": 5},
+    {"x": 10, "y": 10, "depth": 8}
+  ],
+  "tool_diameter": 5,
+  "feedrate": 100,
+  "spindle_speed": 1200,
+  "machine_profile": "generic_drill_mm"
+}
+```
+
+- Each `hole` specifies `x`, `y`, and `depth` (positive number, e.g. `5` → Z=-5).
+- `machine_profile` is optional — it provides defaults for `safe_z`, `units`, and WCS.
+- `feedrate` and `spindle_speed` are never invented — missing values produce errors.
+- Spindle starts once (not before every hole) if the speed stays constant.
+- All output is validated before being returned.
+
+**Run the multi-hole demo:**
+
+```bash
+python scripts/demo_drill_pattern_mvp.py
+```
+
+### Machine Profiles
+
+Machine profiles supply safe defaults for known machine configurations.
+Available profiles can be listed with the `list_profiles` MCP tool.
+
+| Profile | machine_type | units | default_safe_z | default_feedrate | default_spindle |
+|---|---|---|---|---|---|
+| `generic_drill_mm` | drill | mm | 5.0 | (per job) | (per job) |
+| `generic_drill_inch` | drill | inch | 0.2 | (per job) | (per job) |
+
+> Profiles are defaults, not safety guarantees. Feedrate and spindle speed must
+> always be verified before running on a real machine.
+
+---
+
 ## Run tests
 
 ```bash

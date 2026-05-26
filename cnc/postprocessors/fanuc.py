@@ -74,6 +74,10 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
         lines.append("(NO OPERATIONS DEFINED — SAFE PROGRAM SKELETON ONLY)")
     else:
         current_tool: object = None
+        # Spindle state tracking — avoids redundant S.../M03 between ops at same speed
+        current_spindle_speed: int | None = None
+        spindle_active: bool = False
+
         for op in operations:
             if not isinstance(op, dict):
                 lines.append(f"(SKIPPED NON-DICT OPERATION: {op!r})")
@@ -91,12 +95,11 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
             lines.append("")
             lines.append(f"({op_name.upper()} — TYPE: {op_type.upper()})")
 
-            # Tool change if needed and safe_z is known
+            # Tool change if needed
             if tool_ref is not None and tool_ref != current_tool:
                 tool_info = tools.get(tool_ref, {})
                 desc = tool_info.get("description") or tool_info.get("name") or ""
                 lines.append(f"(TOOL {tool_ref}: {desc})")
-                # Only output T/M06 if tool_ref is numeric
                 try:
                     t_num = int(str(tool_ref).lstrip("Tt"))
                     lines.append(f"T{t_num:02d} M06 (TOOL CHANGE)")
@@ -112,12 +115,22 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
             else:
                 lines.append("(WARNING: SAFE Z NOT DEFINED — RETRACT SKIPPED)")
 
-            # Spindle start — only if speed is provided
-            spindle_started = False
-            if spindle:
-                lines.append(f"S{int(spindle)} M03 (SPINDLE CW)")
-                spindle_started = True
+            # Spindle management — start once per speed, avoid redundant M03 restarts
+            spindle_int = int(spindle) if spindle else None
+            if spindle_int:
+                if spindle_active and current_spindle_speed == spindle_int:
+                    lines.append(f"(SPINDLE ALREADY RUNNING AT S{spindle_int} — NO RESTART)")
+                else:
+                    if spindle_active:
+                        lines.append("M05 (SPINDLE SPEED CHANGE — STOP BEFORE RESTART)")
+                    lines.append(f"S{spindle_int} M03 (SPINDLE CW)")
+                    current_spindle_speed = spindle_int
+                    spindle_active = True
             else:
+                if spindle_active:
+                    lines.append("M05 (SPINDLE STOP — NO SPEED FOR THIS OPERATION)")
+                    spindle_active = False
+                    current_spindle_speed = None
                 lines.append("(WARNING: NO SPINDLE SPEED DEFINED — M03 SKIPPED)")
 
             # Operation-specific G-code
@@ -133,13 +146,14 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
                 lines.append(f"(TODO: OPERATION TYPE '{op_type}' NOT YET IMPLEMENTED)")
                 lines.append(f"(PARAMETERS: {params})")
 
-            # Retract after operation
+            # Retract after operation — spindle stays running for next op
             if _safe_z is not None:
                 lines.append(f"G00 Z{_safe_z:.3f} (RETRACT AFTER OPERATION)")
-            # Stop spindle only if it was started
-            if spindle_started:
-                lines.append("M05 (SPINDLE STOP)")
             lines.append("M09 (COOLANT OFF)")
+
+        # Stop spindle after all operations if still running
+        if spindle_active:
+            lines.append("M05 (SPINDLE STOP — END OF OPERATIONS)")
 
     # --- Program end ---
     lines.append("")

@@ -253,3 +253,145 @@ def test_generate_drill_gcode_with_material():
     assert result["ok"] is True
     # Material should appear in G-code header comments
     assert "stainless steel" in result["gcode"].lower() or result["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# G) list_profiles
+# ---------------------------------------------------------------------------
+
+
+def test_list_profiles_importable():
+    from cnc.server import list_profiles
+    assert callable(list_profiles)
+
+
+def test_list_profiles_returns_list():
+    from cnc.server import list_profiles
+    result = list_profiles()
+    assert isinstance(result, list)
+
+
+def test_list_profiles_not_empty():
+    from cnc.server import list_profiles
+    result = list_profiles()
+    assert len(result) > 0
+
+
+def test_list_profiles_contains_generic_drill_mm():
+    from cnc.server import list_profiles
+    names = [p["name"] for p in list_profiles()]
+    assert "generic_drill_mm" in names
+
+
+# ---------------------------------------------------------------------------
+# H) get_profile
+# ---------------------------------------------------------------------------
+
+
+def test_get_profile_importable():
+    from cnc.server import get_profile
+    assert callable(get_profile)
+
+
+def test_get_profile_known_ok():
+    from cnc.server import get_profile
+    result = get_profile("generic_drill_mm")
+    assert result["ok"] is True
+
+
+def test_get_profile_known_returns_profile():
+    from cnc.server import get_profile
+    result = get_profile("generic_drill_mm")
+    assert isinstance(result.get("profile"), dict)
+    assert result["profile"]["machine_type"] == "drill"
+
+
+def test_get_profile_unknown_not_ok():
+    from cnc.server import get_profile
+    result = get_profile("no_such_profile")
+    assert result["ok"] is False
+
+
+def test_get_profile_unknown_profile_is_none():
+    from cnc.server import get_profile
+    result = get_profile("no_such_profile")
+    assert result.get("profile") is None
+
+
+# ---------------------------------------------------------------------------
+# I) generate_drill_pattern_gcode
+# ---------------------------------------------------------------------------
+
+_TWO_HOLES = [{"x": 0, "y": 0, "depth": 5}, {"x": 10, "y": 0, "depth": 10}]
+
+
+def test_generate_drill_pattern_gcode_importable():
+    from cnc.server import generate_drill_pattern_gcode
+    assert callable(generate_drill_pattern_gcode)
+
+
+def test_generate_drill_pattern_gcode_ok():
+    from cnc.server import generate_drill_pattern_gcode
+    result = generate_drill_pattern_gcode(
+        holes=_TWO_HOLES, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+    )
+    assert result["ok"] is True
+
+
+def test_generate_drill_pattern_gcode_has_gcode():
+    from cnc.server import generate_drill_pattern_gcode
+    result = generate_drill_pattern_gcode(
+        holes=_TWO_HOLES, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+    )
+    assert "gcode" in result
+    assert len(result["gcode"]) > 0
+
+
+def test_generate_drill_pattern_gcode_m30_present():
+    from cnc.server import generate_drill_pattern_gcode
+    result = generate_drill_pattern_gcode(
+        holes=_TWO_HOLES, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+    )
+    assert "M30" in result["gcode"]
+
+
+def test_generate_drill_pattern_gcode_two_plunges():
+    from cnc.server import generate_drill_pattern_gcode
+    result = generate_drill_pattern_gcode(
+        holes=_TWO_HOLES, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+    )
+    assert result["gcode"].count("G01 Z") >= 2
+
+
+def test_generate_drill_pattern_gcode_machine_type():
+    from cnc.server import generate_drill_pattern_gcode
+    result = generate_drill_pattern_gcode(
+        holes=_TWO_HOLES, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+    )
+    assert result["machine_type"] == "drill"
+
+
+def test_generate_drill_pattern_gcode_with_profile():
+    from cnc.server import generate_drill_pattern_gcode
+    result = generate_drill_pattern_gcode(
+        holes=_TWO_HOLES, tool_diameter=5,
+        feedrate=100, spindle_speed=1200,
+        machine_profile="generic_drill_mm",
+    )
+    assert result["ok"] is True
+    assert result["machine_profile"] == "generic_drill_mm"
+
+
+def test_generate_drill_pattern_gcode_missing_feedrate_not_ok():
+    from cnc.server import generate_drill_pattern_gcode
+    result = generate_drill_pattern_gcode(
+        holes=_TWO_HOLES, tool_diameter=5,
+        safe_z=5, feedrate=None, spindle_speed=1200,
+    )
+    assert result["ok"] is False
+    assert result["gcode"] == ""
