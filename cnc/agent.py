@@ -31,6 +31,21 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# ---------------------------------------------------------------------------
+# Optional deepagents integration
+# ---------------------------------------------------------------------------
+# Try to import the deepagents package. If unavailable, the custom CNCAgent
+# implementation is used instead. This allows the code to run without the
+# deepagents package installed.
+try:
+    from deepagents import create_deep_agent as _deepagents_create  # type: ignore[import]
+    _DEEPAGENTS_AVAILABLE = True
+    _DEEPAGENTS_IMPORT_ERROR: Exception | None = None
+except ImportError as _exc:
+    _deepagents_create = None  # type: ignore[assignment]
+    _DEEPAGENTS_AVAILABLE = False
+    _DEEPAGENTS_IMPORT_ERROR = _exc
+
 from cnc.subagents.milling import MILLING_AGENT
 from cnc.subagents.drilling import DRILLING_AGENT
 from cnc.subagents.laser import LASER_AGENT
@@ -535,22 +550,91 @@ def _block_to_dict(block: Any) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# deepagents builder (optional)
+# ---------------------------------------------------------------------------
+
+
+def _build_with_deepagents() -> Any:
+    """Build the CNC agent using deepagents.create_deep_agent when available.
+
+    Tries first with a 'model' keyword argument (some API versions require it),
+    then without it. Uses the CNC_AGENT_MODEL environment variable with a
+    conservative default of 'openai:gpt-4o'.
+
+    Returns:
+        A deepagents agent object.
+
+    Raises:
+        RuntimeError: If deepagents is not installed.
+        Exception: If create_deep_agent fails for any reason.
+    """
+    if not _DEEPAGENTS_AVAILABLE:
+        raise RuntimeError(
+            "deepagents is not installed or could not be imported. "
+            "Install it with `pip install deepagents` and check the current API. "
+            f"Original import error: {_DEEPAGENTS_IMPORT_ERROR}"
+        ) from _DEEPAGENTS_IMPORT_ERROR
+
+    model = os.environ.get("CNC_AGENT_MODEL", "openai:gpt-4o")
+
+    kwargs: dict[str, Any] = {
+        "tools": [
+            validate_operation_plan,
+            postprocess_operations,
+        ],
+        "system_prompt": CNC_SUPERVISOR_PROMPT,
+        "subagents": [
+            MILLING_AGENT,
+            DRILLING_AGENT,
+            LASER_AGENT,
+        ],
+        "skills": [
+            "cnc/skills/safety",
+            "cnc/skills/gcode",
+        ],
+    }
+
+    # Try with model argument first, fall back to without it
+    try:
+        return _deepagents_create(model=model, **kwargs)
+    except TypeError:
+        # API version does not accept 'model' argument — try without
+        return _deepagents_create(**kwargs)
+
+
+# ---------------------------------------------------------------------------
 # Public builder
 # ---------------------------------------------------------------------------
 
 
-def build_cnc_agent() -> CNCAgent | _FallbackCNCAgent:
+def build_cnc_agent() -> Any:
     """Build and return the CNC Supervisor Agent.
 
-    Returns CNCAgent (full tool-use loop) when the anthropic package is
-    available. Falls back to _FallbackCNCAgent only if initialisation fails.
+    Priority:
+    1. deepagents.create_deep_agent — if the 'deepagents' package is installed.
+    2. CNCAgent — custom Anthropic tool-use loop (default / fallback).
 
     Returns:
-        An agent with a .run(user_message: str) -> dict method.
+        An agent with a .run(user_message: str) -> dict method and optionally
+        an .ainvoke(user_message: str) coroutine method.
 
     Raises:
-        RuntimeError: If anthropic is not installed at all.
+        RuntimeError: If neither deepagents nor anthropic are available.
     """
+    # Prefer deepagents when available
+    if _DEEPAGENTS_AVAILABLE:
+        try:
+            return _build_with_deepagents()
+        except Exception as exc:  # noqa: BLE001
+            # deepagents installed but failed — fall through to CNCAgent
+            import warnings
+            warnings.warn(
+                f"deepagents.create_deep_agent failed ({exc}); "
+                "falling back to built-in CNCAgent.",
+                stacklevel=2,
+            )
+
+    # Fallback: custom Anthropic-based agent
     try:
         return CNCAgent()
     except RuntimeError:

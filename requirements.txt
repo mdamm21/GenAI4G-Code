@@ -7,11 +7,17 @@ pydantic>=2.0.0
 mcp[cli]>=1.0.0
 anyio>=4.0.0
 
-# DeepAgent orchestration
-# NOTE: 'deepagents' package name may differ — check Anthropic SDK docs.
-# If unavailable, cnc.agent falls back to direct Anthropic API calls.
-# deepagents>=0.1.0          # optional: uncomment when confirmed package name
-# claude-agent-sdk>=0.1.0    # alternative package name
+# DeepAgent orchestration (optional)
+# cnc.agent attempts `from deepagents import create_deep_agent` at import time.
+# If unavailable, it falls back silently to the built-in CNCAgent (Anthropic API).
+# Uncomment the line below once the correct package name is confirmed:
+# deepagents>=0.1.0
+#
+# Environment variables used by cnc.agent:
+#   CNC_AGENT_MODEL   — model for deepagents (default: openai:gpt-4o)
+#   GENAI4G_MODEL     — model for built-in CNCAgent (default: claude-sonnet-4-6)
+#   GENAI4G_MAX_TURNS — max agent loop turns (default: 20)
+#   ANTHROPIC_API_KEY — required for built-in CNCAgent
 
 # LangChain (used by scripts/cnc_milling.py and agent.py ReAct agent)
 langchain>=0.3.0
