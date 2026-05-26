@@ -68,6 +68,48 @@ ANTHROPIC_API_KEY=your-key-here
 
 ---
 
+## Typed Drill MCP Tool
+
+`generate_drill_gcode` is the safe, deterministic MVP path — no LLM, no API key.
+
+It accepts explicit machining parameters, builds a structured OperationPlan,
+validates the plan, runs the postprocessor, and validates the G-code output.
+
+**Example parameters (MCP Inspector / Claude Desktop):**
+
+```json
+{
+  "x": 0,
+  "y": 0,
+  "depth": 5,
+  "tool_diameter": 5,
+  "safe_z": 5,
+  "feedrate": 100,
+  "spindle_speed": 1200,
+  "units": "mm",
+  "work_coordinate_system": "G54",
+  "material": "6061 aluminium",
+  "postprocessor": "fanuc"
+}
+```
+
+**Run the typed tool demo:**
+
+```bash
+python scripts/demo_drill_mcp_tool.py
+```
+
+Compared to `generate_gcode(prompt=...)`:
+
+| | `generate_drill_gcode` | `generate_gcode` |
+|---|---|---|
+| LLM required | No | Yes (ANTHROPIC_API_KEY) |
+| Input | Explicit typed parameters | Natural language prompt |
+| Deterministic | Yes | No |
+| Safe for automation | Yes | Review required |
+
+---
+
 ## Run tests
 
 ```bash

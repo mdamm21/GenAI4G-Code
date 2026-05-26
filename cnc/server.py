@@ -41,6 +41,7 @@ except ImportError as exc:
 from cnc.tools.postprocess_tools import postprocess_operations
 from cnc.tools.validation_tools import validate_operation_plan
 from cnc.validators.gcode_validator import validate_gcode_text
+from cnc.tools.drill_tools import generate_drill_gcode_from_params
 
 mcp = FastMCP("genai4g-cnc")
 
@@ -239,7 +240,90 @@ def postprocess_plan(operation_plan: dict, postprocessor: str = "fanuc") -> dict
 
 
 # ---------------------------------------------------------------------------
-# Tool 5: generate_gcode
+# Tool 5: generate_drill_gcode  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def generate_drill_gcode(
+    x: float,
+    y: float,
+    depth: float,
+    tool_diameter: float,
+    safe_z: float,
+    feedrate: float,
+    spindle_speed: float | None = None,
+    units: str = "mm",
+    work_coordinate_system: str = "G54",
+    material: str | None = None,
+    postprocessor: str = "fanuc",
+) -> dict:
+    """Generate conservative Fanuc-style drilling G-code from explicit drilling parameters.
+
+    This deterministic tool does NOT use an LLM. It builds a structured
+    OperationPlan from the supplied parameters, validates the plan, runs the
+    named postprocessor to produce G-code, and validates the resulting G-code.
+
+    Args:
+        x: Hole X position (in units).
+        y: Hole Y position (in units).
+        depth: Drill depth as a positive number (e.g. 5 → drills to Z=-5).
+               Negative values are accepted and normalised with a warning.
+        tool_diameter: Drill bit diameter (in units).
+        safe_z: Safe retract height above the workpiece (positive, in units).
+        feedrate: Drill feedrate in units/min.
+        spindle_speed: Spindle speed in RPM. If omitted, M03 is skipped and a
+                       warning is included in the response.
+        units: "mm" (default) or "inch".
+        work_coordinate_system: WCS code (default "G54").
+        material: Optional material description for documentation in the G-code header.
+        postprocessor: "fanuc" (default), "grbl", "marlin", or "linuxcnc".
+
+    Returns:
+        {
+          "ok": bool,
+          "machine_type": "drill",
+          "operation_plan": dict,
+          "gcode": str,
+          "validation": dict,
+          "warnings": list[str],
+          "errors": list[str],
+          "postprocessor": str,
+        }
+
+    Safety note:
+        Generated G-code is for review and simulation only.
+        Never run on a real machine without expert verification.
+    """
+    try:
+        return generate_drill_gcode_from_params(
+            x=x,
+            y=y,
+            depth=depth,
+            tool_diameter=tool_diameter,
+            safe_z=safe_z,
+            feedrate=feedrate,
+            spindle_speed=spindle_speed,
+            units=units,
+            work_coordinate_system=work_coordinate_system,
+            material=material,
+            postprocessor=postprocessor,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "machine_type": "drill",
+            "operation_plan": {},
+            "gcode": "",
+            "validation": {"ok": False, "errors": [str(exc)], "warnings": []},
+            "warnings": [],
+            "errors": [f"generate_drill_gcode: unexpected error: {exc}"],
+            "postprocessor": postprocessor,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tool 6: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
 # ---------------------------------------------------------------------------
 
 

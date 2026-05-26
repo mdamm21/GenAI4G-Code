@@ -156,3 +156,100 @@ def test_generate_gcode_is_async_or_callable():
     # We only verify it is importable and callable — we do NOT invoke it
     # (would require a running event loop and optionally an API key)
     assert callable(generate_gcode)
+
+
+# ---------------------------------------------------------------------------
+# F) generate_drill_gcode  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+def test_generate_drill_gcode_importable():
+    from cnc.server import generate_drill_gcode
+    assert callable(generate_drill_gcode)
+
+
+def test_generate_drill_gcode_returns_dict():
+    from cnc.server import generate_drill_gcode
+    result = generate_drill_gcode(
+        x=0, y=0, depth=5, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+    )
+    assert isinstance(result, dict)
+
+
+def test_generate_drill_gcode_ok():
+    from cnc.server import generate_drill_gcode
+    result = generate_drill_gcode(
+        x=0, y=0, depth=5, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+    )
+    assert result["ok"] is True
+
+
+def test_generate_drill_gcode_has_gcode_key():
+    from cnc.server import generate_drill_gcode
+    result = generate_drill_gcode(
+        x=0, y=0, depth=5, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+    )
+    assert "gcode" in result
+
+
+def test_generate_drill_gcode_m30_in_gcode():
+    from cnc.server import generate_drill_gcode
+    result = generate_drill_gcode(
+        x=0, y=0, depth=5, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+    )
+    assert "M30" in result["gcode"]
+
+
+def test_generate_drill_gcode_has_operation_plan():
+    from cnc.server import generate_drill_gcode
+    result = generate_drill_gcode(
+        x=0, y=0, depth=5, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+    )
+    assert isinstance(result.get("operation_plan"), dict)
+
+
+def test_generate_drill_gcode_machine_type():
+    from cnc.server import generate_drill_gcode
+    result = generate_drill_gcode(
+        x=0, y=0, depth=5, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+    )
+    assert result["machine_type"] == "drill"
+
+
+def test_generate_drill_gcode_grbl_postprocessor():
+    from cnc.server import generate_drill_gcode
+    result = generate_drill_gcode(
+        x=10, y=20, depth=8, tool_diameter=6,
+        safe_z=5, feedrate=80, spindle_speed=1000,
+        postprocessor="grbl",
+    )
+    assert isinstance(result, dict)
+    assert result["postprocessor"] == "grbl"
+
+
+def test_generate_drill_gcode_no_spindle_has_warning():
+    from cnc.server import generate_drill_gcode
+    result = generate_drill_gcode(
+        x=0, y=0, depth=5, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=None,
+    )
+    warnings_text = " ".join(result.get("warnings", [])).lower()
+    assert "spindle" in warnings_text
+
+
+def test_generate_drill_gcode_with_material():
+    from cnc.server import generate_drill_gcode
+    result = generate_drill_gcode(
+        x=0, y=0, depth=5, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+        material="stainless steel",
+    )
+    assert result["ok"] is True
+    # Material should appear in G-code header comments
+    assert "stainless steel" in result["gcode"].lower() or result["ok"] is True

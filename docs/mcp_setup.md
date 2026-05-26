@@ -59,13 +59,14 @@ Add the following to your Claude Desktop MCP configuration file.
 
 ## Available MCP tools
 
-| Tool | Description |
-|---|---|
-| `list_supported_machines` | Returns supported machine type identifiers |
-| `validate_gcode` | Static safety check on a G-code program |
-| `validate_plan` | Structural validation of an OperationPlan dict |
-| `postprocess_plan` | Convert an OperationPlan to G-code (deterministic) |
-| `generate_gcode` | Full agentic pipeline: prompt → G-code (requires API key) |
+| Tool | LLM needed | Description |
+|---|---|---|
+| `list_supported_machines` | No | Returns supported machine type identifiers |
+| `validate_gcode` | No | Static safety check on a G-code program |
+| `validate_plan` | No | Structural validation of an OperationPlan dict |
+| `postprocess_plan` | No | Convert an OperationPlan to G-code (deterministic) |
+| `generate_drill_gcode` | **No** | Typed drill pipeline: explicit params → G-code (MVP, deterministic) |
+| `generate_gcode` | Yes | Full agentic pipeline: prompt → G-code (requires API key) |
 
 ---
 
@@ -81,6 +82,35 @@ Add the following to your Claude Desktop MCP configuration file.
 ---
 
 ## Tool call examples
+
+### generate_drill_gcode (deterministic, no API key needed)
+
+The recommended starting point. Supply explicit machining parameters — no LLM involved.
+
+```json
+{
+  "x": 0,
+  "y": 0,
+  "depth": 5,
+  "tool_diameter": 5,
+  "safe_z": 5,
+  "feedrate": 100,
+  "spindle_speed": 1200,
+  "units": "mm",
+  "work_coordinate_system": "G54",
+  "material": "6061 aluminium",
+  "postprocessor": "fanuc"
+}
+```
+
+**Notes:**
+- `depth` is a **positive** number (e.g. `5` drills to Z=-5). Negative values are accepted and normalised with a warning.
+- `spindle_speed` is optional. If omitted, M03 is skipped and a warning is returned.
+- `postprocessor`: `"fanuc"` (default), `"grbl"`, `"marlin"`, or `"linuxcnc"`.
+- This tool is deterministic and requires no API key.
+- Generated G-code must still be reviewed and simulated before use on a real machine.
+
+---
 
 ### validate_plan (deterministic, no API key needed)
 

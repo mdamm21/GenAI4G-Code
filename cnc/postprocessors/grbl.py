@@ -49,11 +49,15 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
 
     # --- Operations ---
     operations = operation_plan.get("operations", [])
-    tools = {
-        t.get("tool_number"): t
-        for t in operation_plan.get("tools", [])
-        if isinstance(t, dict)
-    }
+    # Build tool lookup supporting both tool_number and id
+    tools: dict = {}
+    for t in operation_plan.get("tools", []):
+        if not isinstance(t, dict):
+            continue
+        if t.get("tool_number") is not None:
+            tools[t["tool_number"]] = t
+        if t.get("id") is not None:
+            tools[t["id"]] = t
 
     if not operations:
         lines.append("(NO OPERATIONS DEFINED - SAFE SKELETON ONLY)")
@@ -64,11 +68,11 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
                 lines.append(f"(SKIPPED: {op!r})")
                 continue
 
-            op_name = op.get("name", "UNNAMED")
+            op_name = op.get("name") or op.get("description") or "UNNAMED"
             op_type = op.get("type", "unknown")
-            tool_num = op.get("tool_number")
+            tool_ref = op.get("tool_number") or op.get("tool_id")
             feedrate = op.get("feedrate_mmpm") or op.get("feedrate")
-            spindle = op.get("spindle_rpm")
+            spindle = op.get("spindle_rpm") or op.get("spindle_speed")
             depth = op.get("depth_mm")
             params = op.get("parameters", {})
 
@@ -76,21 +80,23 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
             lines.append(f"({op_name.upper()} - {op_type.upper()})")
 
             # GRBL: no automatic tool change — remind operator
-            if tool_num is not None and tool_num != current_tool:
-                tool_info = tools.get(tool_num, {})
-                desc = tool_info.get("description", "")
-                lines.append(f"(MANUAL TOOL CHANGE: T{tool_num} - {desc})")
+            if tool_ref is not None and tool_ref != current_tool:
+                tool_info = tools.get(tool_ref, {})
+                desc = tool_info.get("description") or tool_info.get("name") or ""
+                lines.append(f"(MANUAL TOOL CHANGE: T{tool_ref} - {desc})")
                 lines.append(f"(PAUSE HERE TO CHANGE TOOL - RESUME WHEN READY)")
-                current_tool = tool_num
+                current_tool = tool_ref
 
             # Retract to safe Z
             lines.append(f"G00 Z{safe_z:.3f}")
 
             # Spindle / laser
+            spindle_started = False
             if spindle:
                 lines.append(f"S{int(spindle)} M3")
+                spindle_started = True
             else:
-                lines.append("(WARNING: NO SPINDLE SPEED)")
+                lines.append("(WARNING: NO SPINDLE SPEED - M3 SKIPPED)")
 
             # Operation body
             if op_type in ("face_mill", "face"):
@@ -108,7 +114,8 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
                 lines.append(f"(PARAMS: {params})")
 
             lines.append(f"G00 Z{safe_z:.3f}")
-            lines.append("M5")    # spindle/laser off
+            if spindle_started:
+                lines.append("M5")    # spindle/laser off
             lines.append("M9")    # coolant off (if connected)
 
     # --- Program end ---
@@ -158,24 +165,40 @@ def _append_profile(lines: list, op: dict, feedrate, depth) -> None:
 
 
 def _append_drill(lines: list, op: dict, feedrate, depth, safe_z: float) -> None:
+    """Generate GRBL drill moves. Handles both single-hole and multi-hole formats."""
     params = op.get("parameters", {})
+    f = feedrate
+
+    # --- New format: single hole with x, y, z in parameters ---
+    x = params.get("x")
+    y = params.get("y")
+    z = params.get("z")
+
+    if x is not None and y is not None and z is not None:
+        if f is None:
+            lines.append(f"(SKIPPED DRILL AT X{x} Y{y} Z{z} - NO FEEDRATE)")
+            return
+        z_float = float(z) if float(z) < 0 else -abs(float(z))
+        lines.append(f"G00 X{float(x):.3f} Y{float(y):.3f}")
+        lines.append(f"G01 Z{z_float:.3f} F{float(f):.3f}")
+        lines.append(f"G00 Z{safe_z:.3f}")
+        return
+
+    # --- Old format: holes list ---
     holes = params.get("holes", [])
-    f = feedrate or 200
+    f_val = f or 200
     z_cut = -abs(depth) if depth else -10.0
     r_plane = float(op.get("retract_height_mm", 2.0))
 
     if holes:
-        # GRBL supports G81/G83 in some builds — use G83 peck for safety
         for h in holes:
-            x, y = float(h.get("x", 0.0)), float(h.get("y", 0.0))
-            lines.append(
-                f"G83 X{x:.3f} Y{y:.3f} Z{z_cut:.3f} "
-                f"R{r_plane:.3f} Q{max(1.0, abs(z_cut)/5):.3f} F{f:.0f}"
-            )
-        lines.append("G80")
+            hx, hy = float(h.get("x", 0.0)), float(h.get("y", 0.0))
+            lines.append(f"G00 X{hx:.3f} Y{hy:.3f}")
+            lines.append(f"G01 Z{z_cut:.3f} F{float(f_val):.3f}")
+            lines.append(f"G00 Z{safe_z:.3f}")
     else:
-        lines.append("(DRILL: NO HOLE COORDS)")
-        lines.append(f"(WOULD DRILL TO Z{z_cut:.3f} F{f:.0f})")
+        lines.append("(DRILL: NO HOLE COORDINATES PROVIDED - SKIPPING)")
+        lines.append(f"(WOULD DRILL TO Z{z_cut:.3f} F{f_val:.0f})")
 
 
 def _append_laser(lines: list, op: dict, feedrate, params: dict) -> None:
