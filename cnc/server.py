@@ -74,6 +74,7 @@ def _error_response(
         "assumptions": [],
         "warnings": warnings or [],
         "errors": errors,
+        "missing_info": [],
         "machine_type": machine_type,
         "validation": {
             "ok": False,
@@ -81,6 +82,7 @@ def _error_response(
             "warnings": warnings or [],
             "machine_type": mt,
         },
+        "safety_report": None,
     }
 
 
@@ -858,61 +860,45 @@ def analyze_gcode_safety_report(
 
 
 # ---------------------------------------------------------------------------
-# Tool 13: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
+# Shared helper — agent invocation
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
-async def generate_gcode(prompt: str, machine_type: str | None = None) -> dict:
-    """Generate G-code from a natural language manufacturing description.
-
-    Delegates to the CNC DeepAgent (cnc.agent.build_cnc_agent) which orchestrates:
-    1. Request parsing and JobSpec extraction.
-    2. Machine-specific subagent planning (OperationPlan).
-    3. Deterministic postprocessing (G-code generation).
-    4. G-code validation before returning.
-
-    NOTE: If the DeepAgent is not yet implemented, returns a structured error.
-    No unsafe direct prompt-to-G-code generation is performed.
-
-    Args:
-        prompt: Natural language manufacturing description.
-                Include material, dimensions, tooling, units, and operations when known.
-        machine_type: Optional hint (mill, lathe, laser, 3d_printer, drill, grinder).
-                      Agent will infer from prompt if not provided.
+async def _invoke_cnc_agent(
+    prompt: str,
+    machine_type: str | None,
+) -> tuple[object | None, dict | None]:
+    """Build the CNC agent and invoke it with *prompt*.
 
     Returns:
-        Dict with keys: ok, gcode, operation_plan, assumptions, warnings,
-                        errors, machine_type, validation.
+        ``(raw_result, None)`` on success.
+        ``(None, error_dict)`` if the agent cannot be built or invoked.
     """
     from cnc.agent import build_cnc_agent
 
-    # Build the user message
     user_msg = prompt
     if machine_type:
         user_msg = f"{prompt}\nPreferred machine type: {machine_type}"
 
-    # --- Try to build and invoke the agent ---
     try:
         agent = build_cnc_agent()
     except NotImplementedError:
-        return _error_response(
-            errors=["generate_gcode requires the DeepAgent implementation from the next step."],
+        return None, _error_response(
+            errors=["This tool requires the CNC DeepAgent (ANTHROPIC_API_KEY)."],
             warnings=["DeepAgent builder is not implemented yet."],
             machine_type=machine_type,
         )
     except RuntimeError as exc:
-        return _error_response(
+        return None, _error_response(
             errors=[f"Agent initialisation failed: {exc}"],
             machine_type=machine_type,
         )
     except Exception as exc:  # noqa: BLE001
-        return _error_response(
+        return None, _error_response(
             errors=[f"Unexpected error building agent: {exc}"],
             machine_type=machine_type,
         )
 
-    # --- Invoke: prefer async, fall back to sync ---
     try:
         if hasattr(agent, "ainvoke"):
             raw = await agent.ainvoke(user_msg)
@@ -921,17 +907,309 @@ async def generate_gcode(prompt: str, machine_type: str | None = None) -> dict:
         elif hasattr(agent, "invoke"):
             raw = agent.invoke(user_msg)
         else:
-            return _error_response(
+            return None, _error_response(
                 errors=["Agent has no callable invoke/run/ainvoke method."],
                 machine_type=machine_type,
             )
     except Exception as exc:  # noqa: BLE001
-        return _error_response(
+        return None, _error_response(
             errors=[f"Agent invocation failed: {exc}"],
             machine_type=machine_type,
         )
 
-    return _normalize_agent_result(raw, machine_type=machine_type)
+    return raw, None
+
+
+# ---------------------------------------------------------------------------
+# Tool 13: plan_operation  (LLM-backed, requires ANTHROPIC_API_KEY)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def plan_operation(
+    prompt: str,
+    machine_type: str | None = None,
+) -> dict:
+    """Plan a CNC operation from natural language and return a structured OperationPlan.
+
+    This tool does NOT generate final G-code. It uses the CNC Supervisor Agent
+    to extract and validate a structured OperationPlan from a natural language
+    description. The resulting plan can be passed to ``postprocess_plan`` to
+    produce G-code deterministically.
+
+    Supported MVP operations:
+    - Drill single hole
+    - Drill multi-hole pattern
+    - Milling facing (rectangular surface milling)
+    - Milling straight slot (along X or Y)
+    - Milling rectangular pocket
+
+    Args:
+        prompt: Natural language manufacturing description.
+                Include material, dimensions, tooling, units, and operations when known.
+        machine_type: Optional hint (``"drill"`` or ``"mill"``).
+
+    Returns:
+        {
+          "ok": bool,
+          "operation_plan": dict | None,
+          "validation": dict,
+          "warnings": list[str],
+          "errors": list[str],
+          "missing_info": list[str],
+          "machine_type": str | None,
+        }
+
+    Safety note:
+        Freeform agent text is never treated as G-code.
+        If ``missing_info`` is non-empty, the plan is incomplete and no G-code
+        should be generated from it.
+    """
+    from cnc.tools.agent_result_tools import (
+        extract_operation_plan_from_agent_result,
+        is_operation_plan_like,
+        normalize_agent_operation_plan,
+    )
+
+    # A) Invoke agent
+    raw, agent_err = await _invoke_cnc_agent(prompt, machine_type)
+    if agent_err is not None:
+        return {
+            "ok": False,
+            "operation_plan": None,
+            "validation": agent_err.get("validation", {}),
+            "warnings": agent_err.get("warnings", []),
+            "errors": agent_err.get("errors", []),
+            "missing_info": [],
+            "machine_type": machine_type,
+        }
+
+    # B) Extract OperationPlan
+    plan_result = extract_operation_plan_from_agent_result(raw)
+    if not is_operation_plan_like(plan_result):
+        return {
+            "ok": False,
+            "operation_plan": None,
+            "validation": {"ok": False, "errors": plan_result.get("errors", []), "warnings": []},
+            "warnings": plan_result.get("warnings", []),
+            "errors": plan_result.get("errors", [
+                "Agent returned unstructured output. Refusing to treat it as an OperationPlan."
+            ]),
+            "missing_info": [],
+            "machine_type": machine_type,
+        }
+
+    # C) Normalize
+    operation_plan = normalize_agent_operation_plan(
+        plan_result, preferred_machine_type=machine_type
+    )
+    mt = operation_plan.get("machine_type") or machine_type
+
+    # D) Return immediately if missing_info is non-empty
+    missing_info = operation_plan.get("missing_info", [])
+    if missing_info:
+        return {
+            "ok": False,
+            "operation_plan": operation_plan,
+            "validation": {
+                "ok": False,
+                "errors": ["Missing required manufacturing information."],
+                "warnings": operation_plan.get("warnings", []),
+            },
+            "warnings": operation_plan.get("warnings", []),
+            "errors": ["Missing required manufacturing information."],
+            "missing_info": missing_info,
+            "machine_type": mt,
+        }
+
+    # E) Validate plan
+    try:
+        plan_val = validate_operation_plan(operation_plan)
+    except Exception as exc:  # noqa: BLE001
+        plan_val = {"ok": False, "errors": [f"Plan validator raised exception: {exc}"], "warnings": []}
+
+    return {
+        "ok": plan_val.get("ok", False),
+        "operation_plan": operation_plan,
+        "validation": plan_val,
+        "warnings": list(operation_plan.get("warnings", [])) + list(plan_val.get("warnings", [])),
+        "errors": plan_val.get("errors", []),
+        "missing_info": [],
+        "machine_type": mt,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tool 14: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def generate_gcode(prompt: str, machine_type: str | None = None) -> dict:
+    """Generate G-code from a natural language manufacturing description.
+
+    Full pipeline:
+    1. CNC DeepAgent parses the prompt and plans a structured OperationPlan.
+    2. OperationPlan is extracted and normalized from the agent result.
+    3. If ``missing_info`` is non-empty, no G-code is produced.
+    4. OperationPlan is validated.
+    5. Postprocessor generates deterministic G-code.
+    6. Safety Analyzer validates the G-code.
+
+    Freeform agent text is NEVER treated as final G-code.
+    Only structured OperationPlans from the validation pipeline are accepted.
+
+    Args:
+        prompt: Natural language manufacturing description.
+                Include material, dimensions, tooling, units, and operations when known.
+        machine_type: Optional hint (``"drill"`` or ``"mill"``).
+                      Agent infers from prompt if not provided.
+
+    Returns:
+        {
+          "ok": bool,
+          "gcode": str,
+          "operation_plan": dict | None,
+          "assumptions": list[str],
+          "warnings": list[str],
+          "errors": list[str],
+          "missing_info": list[str],
+          "validation": dict,
+          "safety_report": dict | None,
+          "machine_type": str | None,
+          "postprocessor": str,
+        }
+
+    Safety note:
+        Requires ANTHROPIC_API_KEY. Generated G-code is for review and
+        simulation only. Never run on a real machine without expert verification.
+    """
+    from cnc.tools.agent_result_tools import (
+        extract_operation_plan_from_agent_result,
+        is_operation_plan_like,
+        normalize_agent_operation_plan,
+    )
+
+    # A) Invoke agent
+    raw, agent_err = await _invoke_cnc_agent(prompt, machine_type)
+    if agent_err is not None:
+        return agent_err
+
+    # B) Extract OperationPlan — reject freeform / unstructured output
+    plan_result = extract_operation_plan_from_agent_result(raw)
+    if not is_operation_plan_like(plan_result):
+        return {
+            "ok": False,
+            "gcode": "",
+            "operation_plan": None,
+            "assumptions": [],
+            "warnings": plan_result.get("warnings", []),
+            "errors": plan_result.get("errors", [
+                "Agent returned unstructured output. "
+                "Refusing to treat it as final G-code."
+            ]),
+            "missing_info": [],
+            "validation": {
+                "ok": False,
+                "errors": plan_result.get("errors", []),
+                "warnings": [],
+                "machine_type": machine_type or "unknown",
+            },
+            "safety_report": None,
+            "machine_type": machine_type,
+            "postprocessor": "fanuc",
+        }
+
+    # C) Normalize
+    operation_plan = normalize_agent_operation_plan(
+        plan_result, preferred_machine_type=machine_type
+    )
+    mt = operation_plan.get("machine_type") or machine_type or "mill"
+
+    # D) Block on missing_info
+    missing_info = operation_plan.get("missing_info", [])
+    if missing_info:
+        return {
+            "ok": False,
+            "gcode": "",
+            "operation_plan": operation_plan,
+            "assumptions": operation_plan.get("assumptions", []),
+            "warnings": operation_plan.get("warnings", []),
+            "errors": ["Missing required manufacturing information."],
+            "missing_info": missing_info,
+            "validation": {
+                "ok": False,
+                "errors": ["Missing required manufacturing information."],
+                "warnings": operation_plan.get("warnings", []),
+                "machine_type": mt,
+            },
+            "safety_report": None,
+            "machine_type": mt,
+            "postprocessor": "fanuc",
+        }
+
+    # E) Validate plan
+    try:
+        plan_val = validate_operation_plan(operation_plan)
+    except Exception as exc:  # noqa: BLE001
+        plan_val = {"ok": False, "errors": [f"Plan validator raised exception: {exc}"], "warnings": []}
+
+    if plan_val.get("errors"):
+        return {
+            "ok": False,
+            "gcode": "",
+            "operation_plan": operation_plan,
+            "assumptions": operation_plan.get("assumptions", []),
+            "warnings": list(operation_plan.get("warnings", [])) + list(plan_val.get("warnings", [])),
+            "errors": plan_val["errors"],
+            "missing_info": [],
+            "validation": plan_val,
+            "safety_report": None,
+            "machine_type": mt,
+            "postprocessor": "fanuc",
+        }
+
+    # F) Postprocess → G-code + safety analysis
+    try:
+        pp = postprocess_operations(operation_plan, postprocessor="fanuc")
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "gcode": "",
+            "operation_plan": operation_plan,
+            "assumptions": operation_plan.get("assumptions", []),
+            "warnings": operation_plan.get("warnings", []),
+            "errors": [f"Postprocessor raised exception: {exc}"],
+            "missing_info": [],
+            "validation": plan_val,
+            "safety_report": None,
+            "machine_type": mt,
+            "postprocessor": "fanuc",
+        }
+
+    combined_warnings = (
+        list(operation_plan.get("warnings", []))
+        + list(plan_val.get("warnings", []))
+        + list(pp.get("warnings", []))
+    )
+
+    return {
+        "ok": pp.get("ok", False),
+        "gcode": pp.get("gcode", ""),
+        "operation_plan": operation_plan,
+        "assumptions": operation_plan.get("assumptions", []),
+        "warnings": combined_warnings,
+        "errors": pp.get("errors", []),
+        "missing_info": [],
+        "validation": pp.get("validation", plan_val),
+        "safety_report": {
+            "risk_level": pp.get("risk_level", "low"),
+            "summary": pp.get("safety_summary", {}),
+            "findings": pp.get("findings", []),
+        },
+        "machine_type": mt,
+        "postprocessor": pp.get("postprocessor", "fanuc"),
+    }
 
 
 # ---------------------------------------------------------------------------

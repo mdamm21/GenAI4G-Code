@@ -686,3 +686,141 @@ def test_analyze_gcode_safety_report_expected_units_mismatch():
     gcode = "G20\nG90\nG54\nF100\nM30"  # G20 = inch
     result = analyze_gcode_safety_report(gcode, machine_type="mill", expected_units="mm")
     assert result["ok"] is False
+
+# ---------------------------------------------------------------------------
+# L) plan_operation  (LLM-backed — tested via monkeypatch, no real API call)
+# ---------------------------------------------------------------------------
+
+import asyncio
+import json as _json
+from unittest.mock import MagicMock
+
+
+_MINIMAL_DRILL_PLAN = {
+    "machine_type": "drill",
+    "units": "mm",
+    "work_coordinate_system": "G54",
+    "safe_z": 5.0,
+    "tools": [{"tool_number": 1, "description": "5mm drill", "diameter_mm": 5}],
+    "operations": [
+        {
+            "type": "drill",
+            "name": "hole 1",
+            "tool_number": 1,
+            "feedrate_mmpm": 100,
+            "spindle_rpm": 1200,
+            "parameters": {"x": 0.0, "y": 0.0, "z": -5.0},
+        }
+    ],
+    "assumptions": [],
+    "warnings": [],
+    "missing_info": [],
+}
+
+_PLAN_WITH_MISSING_INFO = {
+    "machine_type": "drill",
+    "units": "mm",
+    "work_coordinate_system": "G54",
+    "safe_z": 5.0,
+    "tools": [],
+    "operations": [],
+    "assumptions": [],
+    "warnings": [],
+    "missing_info": ["feedrate not specified", "tool_diameter not specified"],
+}
+
+
+class _FakeAgent:
+    """Synchronous fake agent that returns a preset value via run()."""
+    def __init__(self, return_val):
+        self._return_val = return_val
+
+    async def ainvoke(self, msg):
+        return self._return_val
+
+    def run(self, msg):
+        return self._return_val
+
+
+def test_plan_operation_importable():
+    from cnc.server import plan_operation
+    assert callable(plan_operation)
+
+
+def test_generate_gcode_importable():
+    from cnc.server import generate_gcode
+    assert callable(generate_gcode)
+
+
+def test_plan_operation_with_valid_plan(monkeypatch):
+    from cnc.server import plan_operation
+    monkeypatch.setattr("cnc.agent.build_cnc_agent", lambda: _FakeAgent(_MINIMAL_DRILL_PLAN))
+    result = asyncio.run(plan_operation(prompt="drill a hole", machine_type="drill"))
+    assert isinstance(result, dict)
+    assert result["ok"] is True
+    assert "operation_plan" in result
+    assert "gcode" not in result  # plan_operation must not produce G-code
+
+
+def test_plan_operation_no_gcode_key(monkeypatch):
+    from cnc.server import plan_operation
+    monkeypatch.setattr("cnc.agent.build_cnc_agent", lambda: _FakeAgent(_MINIMAL_DRILL_PLAN))
+    result = asyncio.run(plan_operation(prompt="drill a hole", machine_type="drill"))
+    assert "gcode" not in result
+
+
+def test_plan_operation_with_missing_info(monkeypatch):
+    from cnc.server import plan_operation
+    monkeypatch.setattr("cnc.agent.build_cnc_agent", lambda: _FakeAgent(_PLAN_WITH_MISSING_INFO))
+    result = asyncio.run(plan_operation(prompt="drill a hole", machine_type="drill"))
+    assert result["ok"] is False
+    assert result["missing_info"]
+
+
+def test_plan_operation_has_required_keys(monkeypatch):
+    from cnc.server import plan_operation
+    monkeypatch.setattr("cnc.agent.build_cnc_agent", lambda: _FakeAgent(_MINIMAL_DRILL_PLAN))
+    result = asyncio.run(plan_operation(prompt="drill", machine_type="drill"))
+    for key in ("ok", "operation_plan", "validation", "warnings", "errors", "missing_info", "machine_type"):
+        assert key in result, f"Missing key: {key}"
+
+
+def test_generate_gcode_with_valid_plan_produces_gcode(monkeypatch):
+    from cnc.server import generate_gcode
+    monkeypatch.setattr("cnc.agent.build_cnc_agent", lambda: _FakeAgent(_MINIMAL_DRILL_PLAN))
+    result = asyncio.run(generate_gcode(prompt="drill a hole", machine_type="drill"))
+    assert isinstance(result, dict)
+    assert result["ok"] is True
+    assert result.get("gcode")
+    assert "M30" in result["gcode"] or "M2" in result["gcode"]
+
+
+def test_generate_gcode_with_missing_info_no_gcode(monkeypatch):
+    from cnc.server import generate_gcode
+    monkeypatch.setattr("cnc.agent.build_cnc_agent", lambda: _FakeAgent(_PLAN_WITH_MISSING_INFO))
+    result = asyncio.run(generate_gcode(prompt="drill a hole", machine_type="drill"))
+    assert result["ok"] is False
+    assert result["gcode"] == ""
+    assert result["missing_info"]
+
+
+def test_generate_gcode_with_unstructured_output_blocked(monkeypatch):
+    from cnc.server import generate_gcode
+    monkeypatch.setattr("cnc.agent.build_cnc_agent", lambda: _FakeAgent(
+        "G21 G90 G54 G0 Z5 S1200 M03 G01 Z-5 F100 G0 Z5 M05 M30"
+    ))
+    result = asyncio.run(generate_gcode(prompt="drill a hole"))
+    assert result["ok"] is False
+    assert result["gcode"] == ""
+    errors_text = " ".join(result.get("errors", [])).lower()
+    assert "unstructured" in errors_text or "operation" in errors_text
+
+
+def test_generate_gcode_has_safety_report(monkeypatch):
+    from cnc.server import generate_gcode
+    monkeypatch.setattr("cnc.agent.build_cnc_agent", lambda: _FakeAgent(_MINIMAL_DRILL_PLAN))
+    result = asyncio.run(generate_gcode(prompt="drill a hole", machine_type="drill"))
+    assert "safety_report" in result
+    if result["ok"]:
+        assert result["safety_report"] is not None
+        assert "risk_level" in result["safety_report"]

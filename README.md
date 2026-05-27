@@ -311,6 +311,82 @@ python -m scripts.demo_postprocessor_dialects
 
 ---
 
+## Natural-Language Planning v1
+
+The `plan_operation` and `generate_gcode` MCP tools use a CNC DeepAgent to
+parse natural language and produce structured G-code — but with strict architectural
+safeguards.
+
+**Architecture:**
+```
+User Prompt
+    │
+    ▼
+CNC DeepAgent          ← Produces only OperationPlan JSON (never raw G-code)
+    │
+    ▼
+extract_operation_plan ← Rejects freeform text / unstructured agent output
+    │
+    ▼
+normalize_operation_plan ← Fills safe defaults, preserves missing_info
+    │
+    ▼
+validate_operation_plan  ← Structural + safety checks
+    │
+    ▼
+postprocess_operations   ← Deterministic G-code generation (fanuc/grbl/linuxcnc)
+    │
+    ▼
+Safety Analyzer          ← Static G-code safety analysis + risk level
+```
+
+**Safety guarantees:**
+- Agent text is **never** treated as final G-code.
+- `missing_info` blocks G-code generation — no silent fabrication of critical params.
+- Every OperationPlan is validated before postprocessing.
+- Every generated G-code is analyzed by the Safety Analyzer.
+
+**`plan_operation(prompt, machine_type)` — returns OperationPlan only:**
+
+```json
+{
+  "prompt": "Drill a 5mm hole at X0 Y0, depth 5mm, 5mm drill, safe Z 5, feedrate 100, spindle 1200, units mm.",
+  "machine_type": "drill"
+}
+```
+
+Returns `ok`, `operation_plan`, `validation`, `missing_info` — **no G-code**.
+
+**`generate_gcode(prompt, machine_type)` — full pipeline:**
+
+Same input as `plan_operation`, but additionally runs the postprocessor and
+safety analyzer. Returns `ok`, `gcode`, `operation_plan`, `safety_report`, `missing_info`.
+
+If `missing_info` is non-empty, `ok=False` and `gcode=""`.
+
+**Supported MVP operations:**
+- Drill single hole
+- Drill multi-hole pattern
+- Milling facing (rectangular surface milling)
+- Milling straight slot (along X or Y)
+- Milling rectangular pocket
+
+Requires `ANTHROPIC_API_KEY`. All other deterministic tools work without it.
+
+**Demo (requires API key):**
+
+```bash
+python -m scripts.demo_nl_planning_optional
+```
+
+**Demo without API key (normalization only):**
+
+```bash
+python -m scripts.demo_agent_result_normalization
+```
+
+---
+
 ## G-Code Safety Analyzer v1
 
 The `analyze_gcode_safety_report` MCP tool performs **structured static analysis** of any

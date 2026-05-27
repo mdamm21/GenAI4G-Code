@@ -73,7 +73,8 @@ Add the following to your Claude Desktop MCP configuration file.
 | `generate_milling_slot_gcode` | **No** | Straight slot along X or Y: explicit geometry → G-code (deterministic, no cutter comp) |
 | `generate_milling_pocket_gcode` | **No** | Rectangular pocket, raster clearing: explicit geometry → G-code (deterministic, no cutter comp) |
 | `analyze_gcode_safety_report` | **No** | Structured static safety analysis of a G-code program → risk report (deterministic) |
-| `generate_gcode` | Yes | Full agentic pipeline: prompt → G-code (requires API key) |
+| `plan_operation` | Yes | NL prompt → OperationPlan (structured, no G-code, requires API key) |
+| `generate_gcode` | Yes | Full agentic pipeline: NL prompt → OperationPlan → G-code (requires API key) |
 
 ---
 
@@ -357,6 +358,43 @@ All deterministic tools accept a `postprocessor` parameter:
 - Returns `ok`, `risk_level` (`"low"` / `"medium"` / `"high"`), `errors`, `warnings`, `summary`, `findings`.
 - Each finding has: `severity` (`"info"` / `"warning"` / `"error"`), `code`, `line`, `message`, `text`.
 - Static analysis only — no machine motion simulated. Always review before use on a real machine.
+
+---
+
+### plan_operation (requires ANTHROPIC_API_KEY)
+
+Returns a structured OperationPlan only — no G-code. Use to inspect what the
+agent plans before committing to G-code generation.
+
+```json
+{
+  "prompt": "Drill a 5mm deep hole at X0 Y0 with a 5mm drill, safe Z 5mm, feedrate 100, spindle 1200, units mm.",
+  "machine_type": "drill"
+}
+```
+
+Returns `ok`, `operation_plan`, `validation`, `warnings`, `errors`, `missing_info`, `machine_type`.
+If `missing_info` is non-empty, the plan is incomplete and no G-code should be generated from it.
+
+---
+
+### generate_gcode (requires ANTHROPIC_API_KEY)
+
+Full pipeline: NL prompt → OperationPlan → G-code → Safety report.
+
+```json
+{
+  "prompt": "Drill a 5mm deep hole at X0 Y0 with a 5mm drill, safe Z 5mm, feedrate 100, spindle 1200, units mm.",
+  "machine_type": "drill"
+}
+```
+
+**Notes:**
+- Agent output is **never** directly treated as G-code — only structured OperationPlans are accepted.
+- If `missing_info` is non-empty in the agent result, `ok=False` and `gcode=""`.
+- The full pipeline runs: OperationPlan extraction → validation → postprocessor → Safety Analyzer.
+- Deterministic typed tools (`generate_drill_gcode`, etc.) work without an API key and are preferred
+  when all parameters are known.
 
 ---
 
