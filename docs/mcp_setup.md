@@ -72,6 +72,7 @@ Add the following to your Claude Desktop MCP configuration file.
 | `generate_milling_facing_gcode` | **No** | Rectangular facing: explicit geometry → G-code (deterministic, no cutter comp) |
 | `generate_milling_slot_gcode` | **No** | Straight slot along X or Y: explicit geometry → G-code (deterministic, no cutter comp) |
 | `generate_milling_pocket_gcode` | **No** | Rectangular pocket, raster clearing: explicit geometry → G-code (deterministic, no cutter comp) |
+| `analyze_gcode_safety_report` | **No** | Structured static safety analysis of a G-code program → risk report (deterministic) |
 | `generate_gcode` | Yes | Full agentic pipeline: prompt → G-code (requires API key) |
 
 ---
@@ -332,6 +333,30 @@ All deterministic tools accept a `postprocessor` parameter:
   "postprocessor": "linuxcnc"
 }
 ```
+
+---
+
+### analyze_gcode_safety_report (deterministic, no API key needed)
+
+```json
+{
+  "gcode": "G21\nG90\nG54\nG0 Z5\nS1200 M03\nG01 Z-5 F100\nG0 Z5\nM05\nM30",
+  "machine_type": "drill",
+  "expected_units": "mm",
+  "safe_z": 5.0,
+  "max_depth": 10.0
+}
+```
+
+**Notes:**
+- `machine_type`: `"mill"` (default), `"drill"`, `"lathe"`, `"laser"`, `"3d_printer"`. Affects machine-specific checks (spindle, laser enable, hotend temp).
+- `expected_units`: `"mm"` or `"inch"`. Error if program declares the other unit.
+- `safe_z`: Expected retract height — used to warn if program never reaches it.
+- `max_depth`: Maximum allowed cutting depth (positive number). Error if `min_z < -max_depth`.
+- `allowed_commands`: Optional whitelist of `"G<n>"` / `"M<n>"` strings. Error on any not in list.
+- Returns `ok`, `risk_level` (`"low"` / `"medium"` / `"high"`), `errors`, `warnings`, `summary`, `findings`.
+- Each finding has: `severity` (`"info"` / `"warning"` / `"error"`), `code`, `line`, `message`, `text`.
+- Static analysis only — no machine motion simulated. Always review before use on a real machine.
 
 ---
 

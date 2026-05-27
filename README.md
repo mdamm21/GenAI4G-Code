@@ -311,6 +311,50 @@ python -m scripts.demo_postprocessor_dialects
 
 ---
 
+## G-Code Safety Analyzer v1
+
+The `analyze_gcode_safety_report` MCP tool performs **structured static analysis** of any
+G-code program and returns a risk-scored safety report — no LLM or API key required.
+
+It does **not** simulate machine motion and does **not** replace expert review or CAM simulation.
+All results are advisory only.
+
+**What it checks:**
+
+- Unit declaration (G20/G21) — missing, mixed, or mismatched vs expected
+- Positioning mode (G90/G91) — missing or unexpected relative mode
+- Work coordinate system (G54–G59) — missing
+- Feedrate — missing or zero/negative
+- Program end (M30/M2) — missing
+- Rapid move to negative Z (G00 Z<negative>) — **error** (dangerous plunge)
+- Spindle start/stop (M03/M04/M05) — missing, unmatched, or no speed
+- Machine-type specific: hotend temp (3D printer), laser enable (laser)
+- Exceeded `max_depth` — error if program cuts deeper than configured limit
+- Disallowed commands — error if `allowed_commands` whitelist is set
+- Unsupported G/M codes — warning
+
+**Risk levels:** `low` (no issues) / `medium` (warnings only) / `high` (one or more errors)
+
+**Example parameters (MCP Inspector / Claude Desktop):**
+
+```json
+{
+  "gcode": "G21\nG90\nG54\nG0 Z5\nS1200 M03\nG01 Z-5 F100\nG0 Z5\nM05\nM30",
+  "machine_type": "drill",
+  "expected_units": "mm",
+  "safe_z": 5.0,
+  "max_depth": 10.0
+}
+```
+
+**Run the safety analyzer demo:**
+
+```bash
+python scripts/demo_safety_analyzer.py
+```
+
+---
+
 ## Run tests
 
 ```bash

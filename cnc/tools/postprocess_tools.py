@@ -126,4 +126,7 @@ def postprocess_operations(
         "warnings": warnings,
         "errors": errors,
         "validation": gcode_val,
+        "risk_level": gcode_val.get("risk_level", "low"),
+        "safety_summary": gcode_val.get("summary", {}),
+        "findings": gcode_val.get("findings", []),
     }

@@ -768,7 +768,97 @@ def generate_milling_pocket_gcode(
 
 
 # ---------------------------------------------------------------------------
-# Tool 12: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
+# Tool 12: analyze_gcode_safety_report  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def analyze_gcode_safety_report(
+    gcode: str,
+    machine_type: str = "mill",
+    expected_units: str | None = None,
+    safe_z: float | None = None,
+    max_depth: float | None = None,
+    allowed_commands: list[str] | None = None,
+) -> dict:
+    """Run the G-code Safety Analyzer and return a structured safety report.
+
+    This deterministic tool does NOT use an LLM. It performs static analysis
+    of a G-code program and returns a structured report with risk level,
+    individual findings (with severity and line numbers), and a program summary.
+
+    It does NOT simulate machine motion and does NOT replace expert review.
+    All results are advisory only.
+
+    Args:
+        gcode:             G-code program text to analyze.
+        machine_type:      Target machine type (mill, drill, lathe, laser, 3d_printer).
+                           Affects machine-specific checks (spindle, laser, hotend temp).
+        expected_units:    "mm" or "inch". If set, error if program declares other units.
+        safe_z:            Expected safe retract height. Used for heuristic Z-range checks.
+        max_depth:         Maximum allowed cutting depth (positive number).
+                           Error if program cuts deeper than this.
+        allowed_commands:  If set, error on any G/M command not in this list.
+
+    Returns:
+        {
+          "ok": bool,
+          "risk_level": "low" | "medium" | "high",
+          "errors": list[str],
+          "warnings": list[str],
+          "summary": {
+            "machine_type": str,
+            "units": str,
+            "positioning_mode": str,
+            "work_coordinate_system": str | None,
+            "has_program_end": bool,
+            "has_feedrate": bool,
+            "has_spindle_start": bool,
+            "has_spindle_stop": bool,
+            "line_count": int,
+            "motion_line_count": int,
+            "min_z": float | None,
+            "max_z": float | None,
+            "feedrates": list[float],
+            "spindle_speeds": list[float],
+            "unsupported_commands": list[str],
+          },
+          "findings": list[{
+            "severity": "info" | "warning" | "error",
+            "code": str,
+            "line": int | None,
+            "message": str,
+            "text": str | None,
+          }],
+        }
+
+    Safety note:
+        Static analysis only. No machine motion is simulated.
+        Always review and simulate G-code before running on a real machine.
+    """
+    try:
+        from cnc.tools.safety_tools import analyze_gcode
+        return analyze_gcode(
+            gcode=gcode,
+            machine_type=machine_type,
+            expected_units=expected_units,
+            safe_z=safe_z,
+            max_depth=max_depth,
+            allowed_commands=allowed_commands,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "risk_level": "high",
+            "errors": [f"Safety analyzer raised unexpected exception: {exc}"],
+            "warnings": [],
+            "summary": {},
+            "findings": [],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tool 13: generate_gcode  (LLM-backed, requires ANTHROPIC_API_KEY)
 # ---------------------------------------------------------------------------
 
 

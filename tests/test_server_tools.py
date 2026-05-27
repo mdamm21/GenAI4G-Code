@@ -631,3 +631,58 @@ def test_generate_milling_pocket_gcode_missing_step_over_not_ok():
     )
     assert result["ok"] is False
     assert result["gcode"] == ""
+
+
+# ---------------------------------------------------------------------------
+# K) analyze_gcode_safety_report  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+def test_analyze_gcode_safety_report_importable():
+    from cnc.server import analyze_gcode_safety_report
+    assert callable(analyze_gcode_safety_report)
+
+
+def test_analyze_gcode_safety_report_returns_dict():
+    from cnc.server import analyze_gcode_safety_report
+    gcode = "G21\nG90\nG54\nG0 Z5\nS1200 M03\nG01 Z-5 F100\nG0 Z5\nM05\nM30"
+    result = analyze_gcode_safety_report(gcode, machine_type="drill")
+    assert isinstance(result, dict)
+
+
+def test_analyze_gcode_safety_report_has_required_keys():
+    from cnc.server import analyze_gcode_safety_report
+    gcode = "G21\nG90\nG54\nG0 Z5\nS1200 M03\nG01 Z-5 F100\nG0 Z5\nM05\nM30"
+    result = analyze_gcode_safety_report(gcode, machine_type="drill")
+    for key in ("ok", "risk_level", "errors", "warnings", "summary", "findings"):
+        assert key in result, f"Missing key: {key}"
+
+
+def test_analyze_gcode_safety_report_clean_gcode_ok():
+    from cnc.server import analyze_gcode_safety_report
+    gcode = "G21\nG90\nG54\nG0 Z5\nS1200 M03\nG01 Z-5 F100\nG0 Z5\nM05\nM30"
+    result = analyze_gcode_safety_report(gcode, machine_type="drill")
+    assert result["ok"] is True
+    assert result["risk_level"] == "low"
+
+
+def test_analyze_gcode_safety_report_rapid_z_neg_not_ok():
+    from cnc.server import analyze_gcode_safety_report
+    gcode = "G21\nG90\nG54\nG0 Z-10\nM30"
+    result = analyze_gcode_safety_report(gcode, machine_type="mill")
+    assert result["ok"] is False
+    assert result["risk_level"] == "high"
+
+
+def test_analyze_gcode_safety_report_max_depth_exceeded():
+    from cnc.server import analyze_gcode_safety_report
+    gcode = "G21\nG90\nG54\nG0 Z5\nS3000 M03\nG01 Z-20 F150\nG0 Z5\nM05\nM30"
+    result = analyze_gcode_safety_report(gcode, machine_type="mill", max_depth=10.0)
+    assert result["ok"] is False
+
+
+def test_analyze_gcode_safety_report_expected_units_mismatch():
+    from cnc.server import analyze_gcode_safety_report
+    gcode = "G20\nG90\nG54\nF100\nM30"  # G20 = inch
+    result = analyze_gcode_safety_report(gcode, machine_type="mill", expected_units="mm")
+    assert result["ok"] is False
