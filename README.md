@@ -274,6 +274,43 @@ Available profiles can be listed with the `list_profiles` MCP tool.
 
 ---
 
+## Postprocessor Dialects v0
+
+All postprocessors are conservative MVP implementations. No machine-specific guarantees.
+Simulation and expert review are required before running on a real machine.
+
+| Postprocessor | Status | Supported MVP operations |
+|---|---|---|
+| `fanuc` | MVP | drill, facing, slot, pocket |
+| `grbl` | MVP | drill, facing, slot, pocket |
+| `linuxcnc` | MVP | drill, facing, slot, pocket |
+| `marlin` | stub | 3d_printer: not implemented yet |
+
+**Fanuc** — Reference postprocessor. Includes `%` tape delimiters, `O0001` program number, `G17 G40 G49 G80` safety cancel, `T## M06` tool change, `M30` program end.
+
+**GRBL** — Hobbyist/open-source CNC firmware. No `%`, no tool changer, no canned cycles. End sequence: `M5`, `G0 Zsafe`, `M2`.
+
+**LinuxCNC** — Conservative RS274NGC output. No `%`, no o-words, no cutter compensation. Header includes `(Conservative LinuxCNC-style postprocessor)`. End sequence: `M5`, `G0 Zsafe`, `M2`.
+
+**Marlin** — Stub only. Marlin is a laser/3D-printer firmware. CNC milling and drilling operations always return `ok: False`. 3D printing support is not implemented — use a slicer instead.
+
+**Machine profiles for GRBL and LinuxCNC:**
+
+| Profile | machine_type | units | default_postprocessor |
+|---|---|---|---|
+| `generic_drill_grbl_mm` | drill | mm | grbl |
+| `generic_mill_grbl_mm` | mill | mm | grbl |
+| `generic_drill_linuxcnc_mm` | drill | mm | linuxcnc |
+| `generic_mill_linuxcnc_mm` | mill | mm | linuxcnc |
+
+**Dialects demo (no API key needed):**
+
+```bash
+python -m scripts.demo_postprocessor_dialects
+```
+
+---
+
 ## Run tests
 
 ```bash

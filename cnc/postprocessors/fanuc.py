@@ -7,6 +7,14 @@ Generated programs are deliberately conservative:
 - Review all output before running on a real machine.
 """
 
+from __future__ import annotations
+
+from cnc.postprocessors.common import (
+    get_safe_z,
+    get_units_code,
+    get_work_coordinate_system,
+)
+
 
 def generate_gcode_from_operations(operation_plan: dict) -> str:
     """Convert a structured operation plan to Fanuc-compatible G-code.
@@ -17,13 +25,10 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
     lines: list[str] = []
     units = operation_plan.get("units", "mm")
     machine_type = operation_plan.get("machine_type", "mill")
-    safe_z = operation_plan.get("safe_z")
-    wcs = operation_plan.get("work_coordinate_system", "G54")
+    _safe_z: float | None = get_safe_z(operation_plan)
+    wcs = get_work_coordinate_system(operation_plan)
     assumptions = operation_plan.get("assumptions", [])
     warnings_plan = operation_plan.get("warnings", [])
-
-    # Determine safe_z for use in motion — if missing, movements that need it are skipped
-    _safe_z: float | None = float(safe_z) if safe_z is not None else None
 
     # --- Header (% first, per Fanuc standard) ---
     lines.append("%")
@@ -48,7 +53,7 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
 
     # --- Safety setup ---
     lines.append("G17 G40 G49 G80 (SAFETY CANCEL: PLANE/COMP/TLO/CYCLE)")
-    unit_code = "G21" if units == "mm" else "G20"
+    unit_code = get_units_code(units)
     lines.append(f"{unit_code} (UNITS: {'MM' if units == 'mm' else 'INCH'})")
     lines.append("G90 (ABSOLUTE POSITIONING)")
     lines.append("G94 (FEED PER MINUTE)")

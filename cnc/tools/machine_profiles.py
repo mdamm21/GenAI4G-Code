@@ -76,6 +76,62 @@ _PROFILES: dict[str, dict] = {
             "Feedrate and spindle speed must be provided per job.",
         ],
     },
+    "generic_drill_grbl_mm": {
+        "name": "generic_drill_grbl_mm",
+        "machine_type": "drill",
+        "units": "mm",
+        "work_coordinate_system": "G54",
+        "default_safe_z": 5.0,
+        "default_feedrate": None,
+        "default_spindle_speed": None,
+        "default_postprocessor": "grbl",
+        "notes": [
+            "Generic metric drilling profile for GRBL controllers.",
+            "Feedrate and spindle speed must be provided per job.",
+        ],
+    },
+    "generic_mill_grbl_mm": {
+        "name": "generic_mill_grbl_mm",
+        "machine_type": "mill",
+        "units": "mm",
+        "work_coordinate_system": "G54",
+        "default_safe_z": 5.0,
+        "default_feedrate": None,
+        "default_spindle_speed": None,
+        "default_postprocessor": "grbl",
+        "notes": [
+            "Generic metric milling profile for GRBL controllers.",
+            "Feedrate, spindle speed, tool diameter and cutting parameters must be provided per job.",
+        ],
+    },
+    "generic_drill_linuxcnc_mm": {
+        "name": "generic_drill_linuxcnc_mm",
+        "machine_type": "drill",
+        "units": "mm",
+        "work_coordinate_system": "G54",
+        "default_safe_z": 5.0,
+        "default_feedrate": None,
+        "default_spindle_speed": None,
+        "default_postprocessor": "linuxcnc",
+        "notes": [
+            "Generic metric drilling profile for LinuxCNC controllers.",
+            "Feedrate and spindle speed must be provided per job.",
+        ],
+    },
+    "generic_mill_linuxcnc_mm": {
+        "name": "generic_mill_linuxcnc_mm",
+        "machine_type": "mill",
+        "units": "mm",
+        "work_coordinate_system": "G54",
+        "default_safe_z": 5.0,
+        "default_feedrate": None,
+        "default_spindle_speed": None,
+        "default_postprocessor": "linuxcnc",
+        "notes": [
+            "Generic metric milling profile for LinuxCNC controllers.",
+            "Feedrate, spindle speed, tool diameter and cutting parameters must be provided per job.",
+        ],
+    },
 }
 
 

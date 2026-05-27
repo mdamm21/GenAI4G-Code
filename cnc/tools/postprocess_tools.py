@@ -4,11 +4,18 @@ Pipeline:
     1. validate_operation_plan  — reject structurally invalid plans before postprocessing
     2. postprocessor            — deterministic G-code generation
     3. validate_gcode_text      — safety check on the generated G-code
+
+Supported postprocessors: fanuc, grbl, linuxcnc, marlin.
+- fanuc / grbl / linuxcnc: full pipeline (validate → generate → validate gcode)
+- marlin: stub only; returns ok=False for all machine types until implemented
 """
 
 from cnc.postprocessors import POSTPROCESSORS
 from cnc.tools.validation_tools import validate_operation_plan
 from cnc.validators.gcode_validator import validate_gcode_text
+
+# Postprocessors that run the full CNC pipeline
+_CNC_POSTPROCESSORS = {"fanuc", "grbl", "linuxcnc"}
 
 
 def postprocess_operations(
@@ -23,77 +30,97 @@ def postprocess_operations(
 
     Args:
         operation_plan: Structured operation plan dict (matches OperationPlan schema).
-        postprocessor: Postprocessor name: "fanuc", "grbl", "marlin", "linuxcnc".
+        postprocessor:  Postprocessor name: "fanuc", "grbl", "linuxcnc", "marlin".
 
     Returns:
         {
-          "ok": bool,
-          "gcode": str | None,
+          "ok":           bool,
+          "gcode":        str,
           "postprocessor": str,
-          "warnings": list[str],
-          "errors": list[str],
-          "validation": dict,   # G-code validation result (or plan validation on early exit)
+          "warnings":     list[str],
+          "errors":       list[str],
+          "validation":   dict,
         }
     """
-    warnings: list[str] = []
-    errors: list[str] = []
+    _empty_val = {"ok": False, "errors": [], "warnings": []}
 
-    # --- 0. Check postprocessor is supported ---
-    pp_fn = POSTPROCESSORS.get(postprocessor)
-    if pp_fn is None:
-        supported = list(POSTPROCESSORS.keys())
+    # --- 0. Check postprocessor is known ---
+    if postprocessor not in POSTPROCESSORS:
+        supported = sorted(POSTPROCESSORS.keys())
         return {
             "ok": False,
-            "gcode": None,
+            "gcode": "",
             "postprocessor": postprocessor,
-            "warnings": warnings,
+            "warnings": [],
             "errors": [
-                f"Postprocessor '{postprocessor}' not supported. "
-                f"Available: {supported}"
+                f"Unsupported postprocessor: '{postprocessor}'. "
+                f"Supported: {supported}"
             ],
-            "validation": {"ok": False, "errors": [], "warnings": []},
+            "validation": _empty_val,
         }
 
-    # --- 1. Validate operation plan ---
+    # --- 1. Marlin — always a stub; never generates CNC motion ---
+    if postprocessor == "marlin":
+        machine_type_val = operation_plan.get("machine_type", "")
+        if machine_type_val == "3d_printer":
+            return {
+                "ok": False,
+                "gcode": "",
+                "postprocessor": postprocessor,
+                "warnings": [],
+                "errors": ["Marlin 3D-printing postprocessor is not implemented yet."],
+                "validation": _empty_val,
+            }
+        return {
+            "ok": False,
+            "gcode": "",
+            "postprocessor": postprocessor,
+            "warnings": [],
+            "errors": [
+                f"Marlin postprocessor is not supported for machine_type: '{machine_type_val}'. "
+                "Use fanuc, grbl, or linuxcnc for CNC operations."
+            ],
+            "validation": _empty_val,
+        }
+
+    # --- 2. Validate operation plan (for CNC postprocessors) ---
     plan_val = validate_operation_plan(operation_plan)
 
     if plan_val.get("errors"):
-        # Hard errors — do not attempt postprocessing
         return {
             "ok": False,
-            "gcode": None,
+            "gcode": "",
             "postprocessor": postprocessor,
             "warnings": plan_val.get("warnings", []),
             "errors": plan_val.get("errors", []),
             "validation": plan_val,
         }
 
-    # Carry plan warnings forward
-    warnings.extend(plan_val.get("warnings", []))
+    warnings: list[str] = list(plan_val.get("warnings", []))
 
-    # --- 2. Run postprocessor ---
+    # --- 3. Run postprocessor ---
+    pp_fn = POSTPROCESSORS[postprocessor]
     try:
         gcode = pp_fn(operation_plan)
     except Exception as exc:  # noqa: BLE001
         return {
             "ok": False,
-            "gcode": None,
+            "gcode": "",
             "postprocessor": postprocessor,
             "warnings": warnings,
             "errors": [f"Postprocessor '{postprocessor}' raised an exception: {exc}"],
             "validation": plan_val,
         }
 
-    # --- 3. Validate generated G-code ---
+    # --- 4. Validate generated G-code ---
     machine_type = operation_plan.get("machine_type") or "mill"
     gcode_val = validate_gcode_text(gcode, machine_type=machine_type)
 
-    errors.extend(gcode_val.get("errors", []))
+    errors: list[str] = list(gcode_val.get("errors", []))
     warnings.extend(gcode_val.get("warnings", []))
 
-    ok = len(errors) == 0
     return {
-        "ok": ok,
+        "ok": len(errors) == 0,
         "gcode": gcode,
         "postprocessor": postprocessor,
         "warnings": warnings,

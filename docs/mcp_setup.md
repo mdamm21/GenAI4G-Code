@@ -112,7 +112,11 @@ The recommended starting point. Supply explicit machining parameters — no LLM 
 **Notes:**
 - `depth` is a **positive** number (e.g. `5` drills to Z=-5). Negative values are accepted and normalised with a warning.
 - `spindle_speed` is optional. If omitted, M03 is skipped and a warning is returned.
-- `postprocessor`: `"fanuc"` (default), `"grbl"`, `"marlin"`, or `"linuxcnc"`.
+- `postprocessor`: `"fanuc"` (default), `"grbl"`, `"linuxcnc"`, or `"marlin"`.
+  - `"fanuc"` — Fanuc-compatible with `%`, `O0001`, `M30`.
+  - `"grbl"` — GRBL firmware compatible: no `%`, no tool changer, ends with `M2`.
+  - `"linuxcnc"` — Conservative RS274NGC: no `%`, header identifies LinuxCNC style, ends with `M2`.
+  - `"marlin"` — **Stub only.** Always returns `ok: false` for CNC operations. Not implemented.
 - This tool is deterministic and requires no API key.
 - Generated G-code must still be reviewed and simulated before use on a real machine.
 
@@ -222,7 +226,7 @@ Returns the named profile or `{"ok": false, "profile": null, "error": "..."}` if
 - `machine_profile` (optional) — `"generic_mill_mm"` supplies `safe_z=5.0` if not provided.
 - No cutter compensation (G41/G42). No tool radius offset. Program the centerline path.
 - This is a conservative MVP — parallel X passes with Y step-over, not a full CAM algorithm.
-- `postprocessor`: `"fanuc"` (default). Other postprocessors produce comment placeholders for facing.
+- `postprocessor`: `"fanuc"` (default), `"grbl"`, or `"linuxcnc"`. All three produce proper facing paths. `"marlin"` always returns `ok: false`.
 - All output is deterministic and requires no API key. Review and simulate before use.
 
 ---
@@ -251,7 +255,7 @@ Returns the named profile or `{"ok": false, "profile": null, "error": "..."}` if
 - `depth` is a positive number (e.g. `3` → final cut at Z=-3). Negative values normalised with warning.
 - `machine_profile` (optional) — `"generic_mill_mm"` supplies `safe_z=5.0` if not provided.
 - Slot width equals tool diameter. No cutter compensation (G41/G42).
-- `postprocessor`: `"fanuc"` (default).
+- `postprocessor`: `"fanuc"` (default), `"grbl"`, or `"linuxcnc"`. All three produce proper slot paths. `"marlin"` always returns `ok: false`.
 - All output is deterministic and requires no API key. Review and simulate before use.
 
 ---
@@ -282,8 +286,52 @@ Returns the named profile or `{"ok": false, "profile": null, "error": "..."}` if
 - `machine_profile` (optional) — `"generic_mill_mm"` supplies `safe_z=5.0` if not provided.
 - Simple raster clearing — parallel rows along X, Y step-over. No helix-ramping, trochoidal toolpaths, or adaptive clearing.
 - No cutter compensation (G41/G42). No tool radius offset.
-- `postprocessor`: `"fanuc"` (default).
+- `postprocessor`: `"fanuc"` (default), `"grbl"`, or `"linuxcnc"`. All three produce proper pocket raster paths. `"marlin"` always returns `ok: false`.
 - All output is deterministic and requires no API key. Review and simulate before use.
+
+---
+
+## Postprocessor dialects
+
+All deterministic tools accept a `postprocessor` parameter:
+
+| Value | Status | Behaviour |
+|---|---|---|
+| `"fanuc"` | MVP | `%`, `O0001`, `M30`. Reference dialect. |
+| `"grbl"` | MVP | No `%`, no `M06`, ends with `M5 / G0 Zsafe / M2`. |
+| `"linuxcnc"` | MVP | No `%`, `(Conservative LinuxCNC-style postprocessor)` header, ends with `M2`. |
+| `"marlin"` | stub | Always `ok: false`. No CNC motion generated. |
+
+**Example — use GRBL for a drill pattern:**
+
+```json
+{
+  "holes": [{"x": 0, "y": 0, "depth": 5}, {"x": 20, "y": 0, "depth": 5}],
+  "tool_diameter": 5,
+  "feedrate": 100,
+  "spindle_speed": 1200,
+  "postprocessor": "grbl"
+}
+```
+
+**Example — use LinuxCNC for a pocket:**
+
+```json
+{
+  "origin_x": 0,
+  "origin_y": 0,
+  "width": 20,
+  "height": 10,
+  "depth": 3,
+  "tool_diameter": 5,
+  "step_down": 1,
+  "step_over": 2,
+  "safe_z": 5,
+  "feedrate": 150,
+  "spindle_speed": 3000,
+  "postprocessor": "linuxcnc"
+}
+```
 
 ---
 
