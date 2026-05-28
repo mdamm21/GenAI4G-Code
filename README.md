@@ -611,6 +611,68 @@ python -m scripts.demo_job_io
 
 ---
 
+## CLI v0
+
+A thin command-line interface for the deterministic CNC toolchain.
+All commands work **without an LLM or API key**.
+
+```
+python -m cnc.cli <command> [options]
+```
+
+After `pip install -e .` the `genai4g` command is also available.
+
+### Commands
+
+| Command | Description |
+|---|---|
+| `list-profiles` | List all built-in machine profiles |
+| `list-tools` | List built-in tools (requires Tool Library) |
+| `list-materials` | List all built-in materials |
+| `validate-job` | Validate a CNCJobSpec JSON file |
+| `run-job` | Run a CNCJobSpec: validate + G-code + safety analysis |
+| `batch-run` | Run multiple CNCJobSpec files (file or directory) |
+| `analyze-gcode` | Run the safety analyzer on a G-code file |
+| `server` | Show how to start the MCP server |
+
+### Examples
+
+```bash
+# List machine profiles
+python -m cnc.cli list-profiles
+
+# List milling tools (once Tool Library is available)
+python -m cnc.cli list-tools --machine-type mill --operation-type pocket
+
+# List aluminium materials
+python -m cnc.cli list-materials --category aluminum
+
+# Validate a job spec
+python -m cnc.cli validate-job examples/jobs/drill_pattern_job.json
+
+# Run a job and save outputs
+python -m cnc.cli run-job examples/jobs/milling_pocket_job.json \
+    --gcode-out outputs/gcode/pocket.nc \
+    --report-out outputs/runs/pocket_run.json
+
+# Batch-run all jobs in a directory
+python -m cnc.cli batch-run examples/jobs \
+    --output-dir outputs/batches/demo \
+    --save-artifacts
+
+# Analyze a G-code file
+python -m cnc.cli analyze-gcode outputs/gcode/pocket.nc \
+    --machine-type mill \
+    --expected-units mm \
+    --safe-z 5 \
+    --max-depth 10
+```
+
+> **Note:** The CLI produces JSON on stdout. Exit code 0 = ok, 1 = error/failed.
+> Generated G-code is never a safety release — always review and simulate before use.
+
+---
+
 ## Batch Jobs v0
 
 Multiple CNCJobSpec files can be processed in a single batch run.

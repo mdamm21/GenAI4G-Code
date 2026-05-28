@@ -14,6 +14,26 @@ The server uses stdio transport (reads from stdin, writes to stdout). It will wa
 
 ---
 
+## CLI (independent of MCP)
+
+The `cnc.cli` module provides a command-line interface that works without a running MCP server
+or API key. It is useful for testing jobs, validating G-code, and listing library entries
+directly from the terminal.
+
+```bash
+python -m cnc.cli validate-job examples/jobs/drill_pattern_job.json
+python -m cnc.cli run-job examples/jobs/milling_pocket_job.json --gcode-out out.nc
+python -m cnc.cli batch-run examples/jobs --save-artifacts
+python -m cnc.cli analyze-gcode out.nc --machine-type mill --expected-units mm
+python -m cnc.cli list-profiles
+python -m cnc.cli list-materials --category aluminum
+```
+
+All CLI commands output JSON to stdout (exit code 0 = ok, 1 = error).
+The CLI never starts a server and does not use the MCP transport.
+
+---
+
 ## MCP Inspector
 
 Use the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) to explore and test the tools interactively:

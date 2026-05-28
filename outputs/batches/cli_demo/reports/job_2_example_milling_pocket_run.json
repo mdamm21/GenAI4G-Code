@@ -1,0 +1,315 @@
+{
+  "schema_version": "0.1",
+  "run_id": "run_abb7208f-715a-44ba-81fa-d4501c13ebeb",
+  "created_at": "2026-05-28T20:13:48.816732+00:00",
+  "status": "warning",
+  "job": {
+    "schema_version": "0.1",
+    "job_id": "example-milling-pocket-001",
+    "name": "Example milling pocket",
+    "description": "20 x 10 x 3 mm rectangular pocket in aluminium 6061, generic metric mill.",
+    "machine_type": "mill",
+    "machine_profile": "generic_mill_mm",
+    "postprocessor": "fanuc",
+    "material": "aluminum_6061",
+    "tool_ids": [
+      "endmill_5mm_flat"
+    ],
+    "operation_plan": {
+      "machine_type": "mill",
+      "units": "mm",
+      "work_coordinate_system": "G54",
+      "safe_z": 5.0,
+      "material": "aluminum_6061",
+      "tools": [
+        {
+          "id": "T1",
+          "diameter": 5.0
+        }
+      ],
+      "operations": [
+        {
+          "type": "pocket",
+          "feedrate": 150.0,
+          "spindle_speed": 3000.0,
+          "parameters": {
+            "origin_x": 0.0,
+            "origin_y": 0.0,
+            "width": 20.0,
+            "height": 10.0,
+            "target_z": -3.0,
+            "step_down": 1.0,
+            "step_over": 2.0,
+            "tool_diameter": 5.0
+          }
+        }
+      ],
+      "assumptions": [],
+      "warnings": [],
+      "missing_info": []
+    },
+    "assumptions": [],
+    "warnings": [],
+    "missing_info": [],
+    "metadata": {
+      "created_by": "example",
+      "units": "mm"
+    }
+  },
+  "postprocessor": "fanuc",
+  "operation_plan_validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": [
+      "Operation 0 ('pocket') has no tool_number or tool_id."
+    ]
+  },
+  "guardrails": {
+    "ok": true,
+    "errors": [],
+    "warnings": [
+      "Do not assume feedrate or spindle speed from material alone."
+    ],
+    "info": [
+      "Material resolved: 'Aluminum 6061'."
+    ],
+    "material": {
+      "id": "aluminum_6061",
+      "name": "Aluminum 6061",
+      "category": "aluminum",
+      "machinability": "easy",
+      "notes": [
+        "Common machinable aluminum alloy.",
+        "Actual cutting parameters depend on tool, machine rigidity, coolant and setup."
+      ],
+      "warnings": [
+        "Do not assume feedrate or spindle speed from material alone."
+      ],
+      "supported_operations": [
+        "drill",
+        "facing",
+        "slot",
+        "pocket"
+      ]
+    },
+    "findings": [
+      {
+        "severity": "info",
+        "code": "MATERIAL_RESOLVED",
+        "message": "Material resolved: 'Aluminum 6061'.",
+        "operation_index": null
+      },
+      {
+        "severity": "warning",
+        "code": "MATERIAL_WARNING",
+        "message": "Do not assume feedrate or spindle speed from material alone.",
+        "operation_index": null
+      }
+    ]
+  },
+  "postprocess_result": {
+    "ok": true,
+    "errors": [],
+    "warnings": [
+      "operation_plan: Operation 0 ('pocket') has no tool_number or tool_id."
+    ],
+    "job": {
+      "schema_version": "0.1",
+      "job_id": "example-milling-pocket-001",
+      "name": "Example milling pocket",
+      "description": "20 x 10 x 3 mm rectangular pocket in aluminium 6061, generic metric mill.",
+      "machine_type": "mill",
+      "machine_profile": "generic_mill_mm",
+      "postprocessor": "fanuc",
+      "material": "aluminum_6061",
+      "tool_ids": [
+        "endmill_5mm_flat"
+      ],
+      "operation_plan": {
+        "machine_type": "mill",
+        "units": "mm",
+        "work_coordinate_system": "G54",
+        "safe_z": 5.0,
+        "material": "aluminum_6061",
+        "tools": [
+          {
+            "id": "T1",
+            "diameter": 5.0
+          }
+        ],
+        "operations": [
+          {
+            "type": "pocket",
+            "feedrate": 150.0,
+            "spindle_speed": 3000.0,
+            "parameters": {
+              "origin_x": 0.0,
+              "origin_y": 0.0,
+              "width": 20.0,
+              "height": 10.0,
+              "target_z": -3.0,
+              "step_down": 1.0,
+              "step_over": 2.0,
+              "tool_diameter": 5.0
+            }
+          }
+        ],
+        "assumptions": [],
+        "warnings": [],
+        "missing_info": []
+      },
+      "assumptions": [],
+      "warnings": [],
+      "missing_info": [],
+      "metadata": {
+        "created_by": "example",
+        "units": "mm"
+      }
+    },
+    "operation_plan_validation": {
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "Operation 0 ('pocket') has no tool_number or tool_id."
+      ]
+    },
+    "guardrails": {
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "Do not assume feedrate or spindle speed from material alone."
+      ],
+      "info": [
+        "Material resolved: 'Aluminum 6061'."
+      ],
+      "material": {
+        "id": "aluminum_6061",
+        "name": "Aluminum 6061",
+        "category": "aluminum",
+        "machinability": "easy",
+        "notes": [
+          "Common machinable aluminum alloy.",
+          "Actual cutting parameters depend on tool, machine rigidity, coolant and setup."
+        ],
+        "warnings": [
+          "Do not assume feedrate or spindle speed from material alone."
+        ],
+        "supported_operations": [
+          "drill",
+          "facing",
+          "slot",
+          "pocket"
+        ]
+      },
+      "findings": [
+        {
+          "severity": "info",
+          "code": "MATERIAL_RESOLVED",
+          "message": "Material resolved: 'Aluminum 6061'.",
+          "operation_index": null
+        },
+        {
+          "severity": "warning",
+          "code": "MATERIAL_WARNING",
+          "message": "Do not assume feedrate or spindle speed from material alone.",
+          "operation_index": null
+        }
+      ]
+    }
+  },
+  "safety_report": {
+    "risk_level": "medium",
+    "summary": {
+      "machine_type": "mill",
+      "units": "mm",
+      "positioning_mode": "absolute",
+      "work_coordinate_system": "G54",
+      "has_program_end": true,
+      "has_feedrate": true,
+      "has_spindle_start": true,
+      "has_spindle_stop": true,
+      "line_count": 98,
+      "motion_line_count": 51,
+      "min_z": -3.0,
+      "max_z": 5.0,
+      "feedrates": [
+        150.0
+      ],
+      "spindle_speeds": [
+        3000.0
+      ],
+      "unsupported_commands": []
+    },
+    "findings": [
+      {
+        "severity": "info",
+        "code": "UNITS_DETECTED",
+        "line": null,
+        "message": "Units: MM (G21).",
+        "text": null
+      },
+      {
+        "severity": "info",
+        "code": "POSITIONING_DETECTED",
+        "line": null,
+        "message": "Positioning mode: absolute (G90).",
+        "text": null
+      },
+      {
+        "severity": "info",
+        "code": "WCS_DETECTED",
+        "line": null,
+        "message": "Work coordinate system: G54.",
+        "text": null
+      },
+      {
+        "severity": "info",
+        "code": "Z_RANGE",
+        "line": null,
+        "message": "Z range: min=-3.0, max=5.0.",
+        "text": null
+      },
+      {
+        "severity": "info",
+        "code": "MOTION_LINES",
+        "line": null,
+        "message": "Motion lines detected: 51.",
+        "text": null
+      },
+      {
+        "severity": "warning",
+        "code": "RELATIVE_POSITIONING",
+        "line": null,
+        "message": "G91 relative positioning detected. Incremental mode can cause unexpected motion if not properly initialized. Verify all moves are intentional.",
+        "text": null
+      },
+      {
+        "severity": "warning",
+        "code": "G91_NEGATIVE_Z",
+        "line": null,
+        "message": "Relative positioning (G91) combined with negative Z value (-3.0). Incremental Z moves may produce unexpected depth if origin is not correctly set.",
+        "text": null
+      }
+    ]
+  },
+  "gcode": "%\nO0001\n(GENERATED BY GENAI4G CNC — POSTPROCESSOR: FANUC)\n(CONSERVATIVE OUTPUT — REVIEW BEFORE RUNNING ON A MACHINE)\n(MACHINE TYPE: MILL)\n(UNITS: MM)\n(WORK COORDINATE SYSTEM: G54)\n(SAFE Z: 5.0)\nG17 G40 G49 G80 (SAFETY CANCEL: PLANE/COMP/TLO/CYCLE)\nG21 (UNITS: MM)\nG90 (ABSOLUTE POSITIONING)\nG94 (FEED PER MINUTE)\nG54 (WORK COORDINATE SYSTEM)\nG00 Z5.000 (INITIAL RETRACT TO SAFE Z)\n\n(UNNAMED OPERATION — TYPE: POCKET)\n(WARNING: NO TOOL REFERENCE — SKIPPING TOOL CHANGE)\nG00 Z5.000 (RETRACT TO SAFE Z)\nS3000 M03 (SPINDLE CW)\n(POCKET: 20.000x10.000 FROM X0.000 Y0.000, DEPTH Z-3.000, STEP-DOWN 1.000, STEP-OVER 2.000)\n(Pocket raster clearing; no cutter compensation applied)\n(Z PASS 1 — DEPTH Z-1.000)\nG00 Z5.000 (RETRACT TO SAFE Z)\nG00 X0.000 Y0.000 (RAPID TO POCKET ORIGIN)\nG01 Z-1.000 F150.000 (PLUNGE TO DEPTH)\n(ROW 1 — Y0.000 — L>R)\nG00 X0.000 Y0.000 (RAPID TO ROW START)\nG01 X20.000 F150.000 (CUT ROW)\n(ROW 2 — Y2.000 — R>L)\nG00 X20.000 Y2.000 (RAPID TO ROW START)\nG01 X0.000 F150.000 (CUT ROW)\n(ROW 3 — Y4.000 — L>R)\nG00 X0.000 Y4.000 (RAPID TO ROW START)\nG01 X20.000 F150.000 (CUT ROW)\n(ROW 4 — Y6.000 — R>L)\nG00 X20.000 Y6.000 (RAPID TO ROW START)\nG01 X0.000 F150.000 (CUT ROW)\n(ROW 5 — Y8.000 — L>R)\nG00 X0.000 Y8.000 (RAPID TO ROW START)\nG01 X20.000 F150.000 (CUT ROW)\n(ROW 6 — Y10.000 — R>L)\nG00 X20.000 Y10.000 (RAPID TO ROW START)\nG01 X0.000 F150.000 (CUT ROW)\nG00 Z5.000 (RETRACT AFTER Z LEVEL)\n(Z PASS 2 — DEPTH Z-2.000)\nG00 Z5.000 (RETRACT TO SAFE Z)\nG00 X0.000 Y0.000 (RAPID TO POCKET ORIGIN)\nG01 Z-2.000 F150.000 (PLUNGE TO DEPTH)\n(ROW 1 — Y0.000 — L>R)\nG00 X0.000 Y0.000 (RAPID TO ROW START)\nG01 X20.000 F150.000 (CUT ROW)\n(ROW 2 — Y2.000 — R>L)\nG00 X20.000 Y2.000 (RAPID TO ROW START)\nG01 X0.000 F150.000 (CUT ROW)\n(ROW 3 — Y4.000 — L>R)\nG00 X0.000 Y4.000 (RAPID TO ROW START)\nG01 X20.000 F150.000 (CUT ROW)\n(ROW 4 — Y6.000 — R>L)\nG00 X20.000 Y6.000 (RAPID TO ROW START)\nG01 X0.000 F150.000 (CUT ROW)\n(ROW 5 — Y8.000 — L>R)\nG00 X0.000 Y8.000 (RAPID TO ROW START)\nG01 X20.000 F150.000 (CUT ROW)\n(ROW 6 — Y10.000 — R>L)\nG00 X20.000 Y10.000 (RAPID TO ROW START)\nG01 X0.000 F150.000 (CUT ROW)\nG00 Z5.000 (RETRACT AFTER Z LEVEL)\n(Z PASS 3 — DEPTH Z-3.000)\nG00 Z5.000 (RETRACT TO SAFE Z)\nG00 X0.000 Y0.000 (RAPID TO POCKET ORIGIN)\nG01 Z-3.000 F150.000 (PLUNGE TO DEPTH)\n(ROW 1 — Y0.000 — L>R)\nG00 X0.000 Y0.000 (RAPID TO ROW START)\nG01 X20.000 F150.000 (CUT ROW)\n(ROW 2 — Y2.000 — R>L)\nG00 X20.000 Y2.000 (RAPID TO ROW START)\nG01 X0.000 F150.000 (CUT ROW)\n(ROW 3 — Y4.000 — L>R)\nG00 X0.000 Y4.000 (RAPID TO ROW START)\nG01 X20.000 F150.000 (CUT ROW)\n(ROW 4 — Y6.000 — R>L)\nG00 X20.000 Y6.000 (RAPID TO ROW START)\nG01 X0.000 F150.000 (CUT ROW)\n(ROW 5 — Y8.000 — L>R)\nG00 X0.000 Y8.000 (RAPID TO ROW START)\nG01 X20.000 F150.000 (CUT ROW)\n(ROW 6 — Y10.000 — R>L)\nG00 X20.000 Y10.000 (RAPID TO ROW START)\nG01 X0.000 F150.000 (CUT ROW)\nG00 Z5.000 (RETRACT AFTER Z LEVEL)\nG00 Z5.000 (RETRACT AFTER OPERATION)\nM09 (COOLANT OFF)\nM05 (SPINDLE STOP — END OF OPERATIONS)\n\nG28 G91 Z0. (RETURN Z TO HOME)\nG90\nM30 (PROGRAM END)\n%",
+  "warnings": [
+    "operation_plan: Operation 0 ('pocket') has no tool_number or tool_id.",
+    "operation_plan: Operation 0 ('pocket') has no tool_number or tool_id.",
+    "Operation 0 ('pocket') has no tool_number or tool_id.",
+    "G91 relative positioning detected. Incremental mode can cause unexpected motion if not properly initialized. Verify all moves are intentional.",
+    "Relative positioning (G91) combined with negative Z value (-3.0). Incremental Z moves may produce unexpected depth if origin is not correctly set."
+  ],
+  "errors": [],
+  "artifacts": [
+    {
+      "kind": "gcode",
+      "path": "outputs/batches/cli_demo\\gcode\\job_2_example_milling_pocket.nc",
+      "content_preview": "%\nO0001\n(GENERATED BY GENAI4G CNC — POSTPROCESSOR: FANUC)\n(CONSERVATIVE OUTPUT — REVIEW BEFORE RUNNING ON A MACHINE)\n(MACHINE TYPE: MILL)\n(UNITS: MM)\n(WORK COORDINATE SYSTEM: G54)\n(SAFE Z: 5.0)\nG17 G40 G49 G80 (SAFETY CANCEL: PLANE/COMP/TLO/CYCLE)\nG21 (UNITS: MM)\nG90 (ABSOLUTE POSITIONING)\nG94 (FEED PER MINUTE)\nG54 (WORK COORDINATE SYSTEM)\nG00 Z5.000 (INITIAL RETRACT TO SAFE Z)\n\n(UNNAMED OPERATION — TYPE: POCKET)\n(WARNING: NO TOOL REFERENCE — SKIPPING TOOL CHANGE)\nG00 Z5.000 (RETRACT TO SAFE Z)\n",
+      "metadata": {
+        "postprocessor": "fanuc"
+      }
+    }
+  ],
+  "metadata": {}
+}

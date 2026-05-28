@@ -1,0 +1,334 @@
+{
+  "schema_version": "0.1",
+  "run_id": "run_a9de1d33-64b0-4204-ba29-77048c6efe8b",
+  "created_at": "2026-05-28T20:13:48.813309+00:00",
+  "status": "warning",
+  "job": {
+    "schema_version": "0.1",
+    "job_id": "072a6002-add8-4886-b948-2074345aedac",
+    "name": "Demo pocket job",
+    "description": "50x30x5 mm pocket, 6mm endmill, Al6061",
+    "machine_type": "mill",
+    "machine_profile": "generic_mill_mm",
+    "postprocessor": "fanuc",
+    "material": "aluminum_6061",
+    "tool_ids": [
+      "T1"
+    ],
+    "operation_plan": {
+      "machine_type": "mill",
+      "units": "mm",
+      "work_coordinate_system": "G54",
+      "safe_z": 5.0,
+      "tools": [
+        {
+          "id": "T1",
+          "name": "6mm end mill",
+          "diameter": 6.0,
+          "units": "mm",
+          "feedrate": 200.0,
+          "spindle_speed": 4000.0
+        }
+      ],
+      "operations": [
+        {
+          "type": "pocket",
+          "description": "Mill rectangular pocket 50x30mm at origin X0 Y0 to depth 5mm",
+          "tool_id": "T1",
+          "parameters": {
+            "origin_x": 0.0,
+            "origin_y": 0.0,
+            "width": 50.0,
+            "height": 30.0,
+            "target_z": -5.0,
+            "step_down": 1.5,
+            "step_over": 3.0,
+            "tool_diameter": 6.0
+          },
+          "feedrate": 200.0,
+          "spindle_speed": 4000.0
+        }
+      ],
+      "assumptions": [
+        "Material: aluminum_6061",
+        "Pocket toolpath is a simple raster clearing strategy.",
+        "No cutter compensation is applied."
+      ],
+      "warnings": [],
+      "missing_info": [],
+      "material": "aluminum_6061"
+    },
+    "assumptions": [
+      "Material: aluminum_6061",
+      "Pocket toolpath is a simple raster clearing strategy.",
+      "No cutter compensation is applied."
+    ],
+    "warnings": [],
+    "missing_info": [],
+    "metadata": {
+      "author": "demo_job_io.py",
+      "units": "mm"
+    }
+  },
+  "postprocessor": "fanuc",
+  "operation_plan_validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": []
+  },
+  "guardrails": {
+    "ok": true,
+    "errors": [],
+    "warnings": [
+      "Do not assume feedrate or spindle speed from material alone."
+    ],
+    "info": [
+      "Material resolved: 'Aluminum 6061'."
+    ],
+    "material": {
+      "id": "aluminum_6061",
+      "name": "Aluminum 6061",
+      "category": "aluminum",
+      "machinability": "easy",
+      "notes": [
+        "Common machinable aluminum alloy.",
+        "Actual cutting parameters depend on tool, machine rigidity, coolant and setup."
+      ],
+      "warnings": [
+        "Do not assume feedrate or spindle speed from material alone."
+      ],
+      "supported_operations": [
+        "drill",
+        "facing",
+        "slot",
+        "pocket"
+      ]
+    },
+    "findings": [
+      {
+        "severity": "info",
+        "code": "MATERIAL_RESOLVED",
+        "message": "Material resolved: 'Aluminum 6061'.",
+        "operation_index": null
+      },
+      {
+        "severity": "warning",
+        "code": "MATERIAL_WARNING",
+        "message": "Do not assume feedrate or spindle speed from material alone.",
+        "operation_index": null
+      }
+    ]
+  },
+  "postprocess_result": {
+    "ok": true,
+    "errors": [],
+    "warnings": [],
+    "job": {
+      "schema_version": "0.1",
+      "job_id": "072a6002-add8-4886-b948-2074345aedac",
+      "name": "Demo pocket job",
+      "description": "50x30x5 mm pocket, 6mm endmill, Al6061",
+      "machine_type": "mill",
+      "machine_profile": "generic_mill_mm",
+      "postprocessor": "fanuc",
+      "material": "aluminum_6061",
+      "tool_ids": [
+        "T1"
+      ],
+      "operation_plan": {
+        "machine_type": "mill",
+        "units": "mm",
+        "work_coordinate_system": "G54",
+        "safe_z": 5.0,
+        "tools": [
+          {
+            "id": "T1",
+            "name": "6mm end mill",
+            "diameter": 6.0,
+            "units": "mm",
+            "feedrate": 200.0,
+            "spindle_speed": 4000.0
+          }
+        ],
+        "operations": [
+          {
+            "type": "pocket",
+            "description": "Mill rectangular pocket 50x30mm at origin X0 Y0 to depth 5mm",
+            "tool_id": "T1",
+            "parameters": {
+              "origin_x": 0.0,
+              "origin_y": 0.0,
+              "width": 50.0,
+              "height": 30.0,
+              "target_z": -5.0,
+              "step_down": 1.5,
+              "step_over": 3.0,
+              "tool_diameter": 6.0
+            },
+            "feedrate": 200.0,
+            "spindle_speed": 4000.0
+          }
+        ],
+        "assumptions": [
+          "Material: aluminum_6061",
+          "Pocket toolpath is a simple raster clearing strategy.",
+          "No cutter compensation is applied."
+        ],
+        "warnings": [],
+        "missing_info": [],
+        "material": "aluminum_6061"
+      },
+      "assumptions": [
+        "Material: aluminum_6061",
+        "Pocket toolpath is a simple raster clearing strategy.",
+        "No cutter compensation is applied."
+      ],
+      "warnings": [],
+      "missing_info": [],
+      "metadata": {
+        "author": "demo_job_io.py",
+        "units": "mm"
+      }
+    },
+    "operation_plan_validation": {
+      "ok": true,
+      "errors": [],
+      "warnings": []
+    },
+    "guardrails": {
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "Do not assume feedrate or spindle speed from material alone."
+      ],
+      "info": [
+        "Material resolved: 'Aluminum 6061'."
+      ],
+      "material": {
+        "id": "aluminum_6061",
+        "name": "Aluminum 6061",
+        "category": "aluminum",
+        "machinability": "easy",
+        "notes": [
+          "Common machinable aluminum alloy.",
+          "Actual cutting parameters depend on tool, machine rigidity, coolant and setup."
+        ],
+        "warnings": [
+          "Do not assume feedrate or spindle speed from material alone."
+        ],
+        "supported_operations": [
+          "drill",
+          "facing",
+          "slot",
+          "pocket"
+        ]
+      },
+      "findings": [
+        {
+          "severity": "info",
+          "code": "MATERIAL_RESOLVED",
+          "message": "Material resolved: 'Aluminum 6061'.",
+          "operation_index": null
+        },
+        {
+          "severity": "warning",
+          "code": "MATERIAL_WARNING",
+          "message": "Do not assume feedrate or spindle speed from material alone.",
+          "operation_index": null
+        }
+      ]
+    }
+  },
+  "safety_report": {
+    "risk_level": "medium",
+    "summary": {
+      "machine_type": "mill",
+      "units": "mm",
+      "positioning_mode": "absolute",
+      "work_coordinate_system": "G54",
+      "has_program_end": true,
+      "has_feedrate": true,
+      "has_spindle_start": true,
+      "has_spindle_stop": true,
+      "line_count": 186,
+      "motion_line_count": 107,
+      "min_z": -5.0,
+      "max_z": 5.0,
+      "feedrates": [
+        200.0
+      ],
+      "spindle_speeds": [
+        4000.0
+      ],
+      "unsupported_commands": []
+    },
+    "findings": [
+      {
+        "severity": "info",
+        "code": "UNITS_DETECTED",
+        "line": null,
+        "message": "Units: MM (G21).",
+        "text": null
+      },
+      {
+        "severity": "info",
+        "code": "POSITIONING_DETECTED",
+        "line": null,
+        "message": "Positioning mode: absolute (G90).",
+        "text": null
+      },
+      {
+        "severity": "info",
+        "code": "WCS_DETECTED",
+        "line": null,
+        "message": "Work coordinate system: G54.",
+        "text": null
+      },
+      {
+        "severity": "info",
+        "code": "Z_RANGE",
+        "line": null,
+        "message": "Z range: min=-5.0, max=5.0.",
+        "text": null
+      },
+      {
+        "severity": "info",
+        "code": "MOTION_LINES",
+        "line": null,
+        "message": "Motion lines detected: 107.",
+        "text": null
+      },
+      {
+        "severity": "warning",
+        "code": "RELATIVE_POSITIONING",
+        "line": null,
+        "message": "G91 relative positioning detected. Incremental mode can cause unexpected motion if not properly initialized. Verify all moves are intentional.",
+        "text": null
+      },
+      {
+        "severity": "warning",
+        "code": "G91_NEGATIVE_Z",
+        "line": null,
+        "message": "Relative positioning (G91) combined with negative Z value (-5.0). Incremental Z moves may produce unexpected depth if origin is not correctly set.",
+        "text": null
+      }
+    ]
+  },
+  "gcode": "%\nO0001\n(GENERATED BY GENAI4G CNC — POSTPROCESSOR: FANUC)\n(CONSERVATIVE OUTPUT — REVIEW BEFORE RUNNING ON A MACHINE)\n(MACHINE TYPE: MILL)\n(UNITS: MM)\n(WORK COORDINATE SYSTEM: G54)\n(SAFE Z: 5.0)\n(ASSUMPTIONS:)\n(  - Material: aluminum_6061)\n(  - Pocket toolpath is a simple raster clearing strategy.)\n(  - No cutter compensation is applied.)\nG17 G40 G49 G80 (SAFETY CANCEL: PLANE/COMP/TLO/CYCLE)\nG21 (UNITS: MM)\nG90 (ABSOLUTE POSITIONING)\nG94 (FEED PER MINUTE)\nG54 (WORK COORDINATE SYSTEM)\nG00 Z5.000 (INITIAL RETRACT TO SAFE Z)\n\n(MILL RECTANGULAR POCKET 50X30MM AT ORIGIN X0 Y0 TO DEPTH 5MM — TYPE: POCKET)\n(TOOL T1: 6mm end mill)\nT01 M06 (TOOL CHANGE)\nG00 Z5.000 (RETRACT TO SAFE Z)\nS4000 M03 (SPINDLE CW)\n(POCKET: 50.000x30.000 FROM X0.000 Y0.000, DEPTH Z-5.000, STEP-DOWN 1.500, STEP-OVER 3.000)\n(Pocket raster clearing; no cutter compensation applied)\n(Z PASS 1 — DEPTH Z-1.500)\nG00 Z5.000 (RETRACT TO SAFE Z)\nG00 X0.000 Y0.000 (RAPID TO POCKET ORIGIN)\nG01 Z-1.500 F200.000 (PLUNGE TO DEPTH)\n(ROW 1 — Y0.000 — L>R)\nG00 X0.000 Y0.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 2 — Y3.000 — R>L)\nG00 X50.000 Y3.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 3 — Y6.000 — L>R)\nG00 X0.000 Y6.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 4 — Y9.000 — R>L)\nG00 X50.000 Y9.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 5 — Y12.000 — L>R)\nG00 X0.000 Y12.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 6 — Y15.000 — R>L)\nG00 X50.000 Y15.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 7 — Y18.000 — L>R)\nG00 X0.000 Y18.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 8 — Y21.000 — R>L)\nG00 X50.000 Y21.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 9 — Y24.000 — L>R)\nG00 X0.000 Y24.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 10 — Y27.000 — R>L)\nG00 X50.000 Y27.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 11 — Y30.000 — L>R)\nG00 X0.000 Y30.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\nG00 Z5.000 (RETRACT AFTER Z LEVEL)\n(Z PASS 2 — DEPTH Z-3.000)\nG00 Z5.000 (RETRACT TO SAFE Z)\nG00 X0.000 Y0.000 (RAPID TO POCKET ORIGIN)\nG01 Z-3.000 F200.000 (PLUNGE TO DEPTH)\n(ROW 1 — Y0.000 — L>R)\nG00 X0.000 Y0.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 2 — Y3.000 — R>L)\nG00 X50.000 Y3.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 3 — Y6.000 — L>R)\nG00 X0.000 Y6.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 4 — Y9.000 — R>L)\nG00 X50.000 Y9.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 5 — Y12.000 — L>R)\nG00 X0.000 Y12.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 6 — Y15.000 — R>L)\nG00 X50.000 Y15.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 7 — Y18.000 — L>R)\nG00 X0.000 Y18.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 8 — Y21.000 — R>L)\nG00 X50.000 Y21.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 9 — Y24.000 — L>R)\nG00 X0.000 Y24.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 10 — Y27.000 — R>L)\nG00 X50.000 Y27.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 11 — Y30.000 — L>R)\nG00 X0.000 Y30.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\nG00 Z5.000 (RETRACT AFTER Z LEVEL)\n(Z PASS 3 — DEPTH Z-4.500)\nG00 Z5.000 (RETRACT TO SAFE Z)\nG00 X0.000 Y0.000 (RAPID TO POCKET ORIGIN)\nG01 Z-4.500 F200.000 (PLUNGE TO DEPTH)\n(ROW 1 — Y0.000 — L>R)\nG00 X0.000 Y0.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 2 — Y3.000 — R>L)\nG00 X50.000 Y3.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 3 — Y6.000 — L>R)\nG00 X0.000 Y6.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 4 — Y9.000 — R>L)\nG00 X50.000 Y9.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 5 — Y12.000 — L>R)\nG00 X0.000 Y12.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 6 — Y15.000 — R>L)\nG00 X50.000 Y15.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 7 — Y18.000 — L>R)\nG00 X0.000 Y18.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 8 — Y21.000 — R>L)\nG00 X50.000 Y21.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 9 — Y24.000 — L>R)\nG00 X0.000 Y24.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 10 — Y27.000 — R>L)\nG00 X50.000 Y27.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 11 — Y30.000 — L>R)\nG00 X0.000 Y30.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\nG00 Z5.000 (RETRACT AFTER Z LEVEL)\n(Z PASS 4 — DEPTH Z-5.000)\nG00 Z5.000 (RETRACT TO SAFE Z)\nG00 X0.000 Y0.000 (RAPID TO POCKET ORIGIN)\nG01 Z-5.000 F200.000 (PLUNGE TO DEPTH)\n(ROW 1 — Y0.000 — L>R)\nG00 X0.000 Y0.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 2 — Y3.000 — R>L)\nG00 X50.000 Y3.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 3 — Y6.000 — L>R)\nG00 X0.000 Y6.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 4 — Y9.000 — R>L)\nG00 X50.000 Y9.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 5 — Y12.000 — L>R)\nG00 X0.000 Y12.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 6 — Y15.000 — R>L)\nG00 X50.000 Y15.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 7 — Y18.000 — L>R)\nG00 X0.000 Y18.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 8 — Y21.000 — R>L)\nG00 X50.000 Y21.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 9 — Y24.000 — L>R)\nG00 X0.000 Y24.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\n(ROW 10 — Y27.000 — R>L)\nG00 X50.000 Y27.000 (RAPID TO ROW START)\nG01 X0.000 F200.000 (CUT ROW)\n(ROW 11 — Y30.000 — L>R)\nG00 X0.000 Y30.000 (RAPID TO ROW START)\nG01 X50.000 F200.000 (CUT ROW)\nG00 Z5.000 (RETRACT AFTER Z LEVEL)\nG00 Z5.000 (RETRACT AFTER OPERATION)\nM09 (COOLANT OFF)\nM05 (SPINDLE STOP — END OF OPERATIONS)\n\nG28 G91 Z0. (RETURN Z TO HOME)\nG90\nM30 (PROGRAM END)\n%",
+  "warnings": [
+    "G91 relative positioning detected. Incremental mode can cause unexpected motion if not properly initialized. Verify all moves are intentional.",
+    "Relative positioning (G91) combined with negative Z value (-5.0). Incremental Z moves may produce unexpected depth if origin is not correctly set."
+  ],
+  "errors": [],
+  "artifacts": [
+    {
+      "kind": "gcode",
+      "path": "outputs/batches/cli_demo\\gcode\\job_1_demo_pocket_job.nc",
+      "content_preview": "%\nO0001\n(GENERATED BY GENAI4G CNC — POSTPROCESSOR: FANUC)\n(CONSERVATIVE OUTPUT — REVIEW BEFORE RUNNING ON A MACHINE)\n(MACHINE TYPE: MILL)\n(UNITS: MM)\n(WORK COORDINATE SYSTEM: G54)\n(SAFE Z: 5.0)\n(ASSUMPTIONS:)\n(  - Material: aluminum_6061)\n(  - Pocket toolpath is a simple raster clearing strategy.)\n(  - No cutter compensation is applied.)\nG17 G40 G49 G80 (SAFETY CANCEL: PLANE/COMP/TLO/CYCLE)\nG21 (UNITS: MM)\nG90 (ABSOLUTE POSITIONING)\nG94 (FEED PER MINUTE)\nG54 (WORK COORDINATE SYSTEM)\nG00 Z5.000 (",
+      "metadata": {
+        "postprocessor": "fanuc"
+      }
+    }
+  ],
+  "metadata": {}
+}
