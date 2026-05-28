@@ -611,6 +611,72 @@ python -m scripts.demo_job_io
 
 ---
 
+## Batch Jobs v0
+
+Multiple CNCJobSpec files can be processed in a single batch run.
+Each job goes through the full deterministic pipeline independently.
+
+### What a batch does
+
+```
+List of CNCJobSpecs  (or directory / path list)
+    │
+    ▼  for each job
+    run_job(...)            ← validate + G-code + safety
+    │
+    ▼
+BatchJobResult
+    │
+    ▼
+CNCBatchReport              ← summary of all job results
+```
+
+### Batch Report structure
+
+| Field | Description |
+|---|---|
+| `schema_version` | `"0.1"` |
+| `batch_id` | Auto-generated `batch_<uuid4>` |
+| `created_at` | UTC ISO 8601 timestamp |
+| `status` | `"ok"` / `"warning"` / `"mixed"` / `"failed"` |
+| `total_jobs` | Number of jobs in the batch |
+| `ok_count` / `warning_count` / `failed_count` | Per-status counts |
+| `results` | List of `BatchJobResult` entries |
+
+Each `BatchJobResult` contains `job_index`, `job_name`, `job_path`, `ok`, `status`, `run_id`, `gcode_path`, `report_path`, `warnings`, `errors`.
+
+### Python API
+
+```python
+from cnc.tools.batch_jobs import run_job_batch_from_paths
+
+result = run_job_batch_from_paths(
+    paths=["examples/jobs/drill_pattern_job.json", "examples/jobs/milling_pocket_job.json"],
+    output_dir="outputs/batches/my_batch",
+    save_artifacts=True,
+)
+print(result["batch_report"]["status"])      # "ok" / "warning" / "mixed" / "failed"
+print(result["batch_report"]["ok_count"])
+```
+
+### New MCP tools
+
+| Tool | Description |
+|---|---|
+| `run_cnc_job_batch` | Run a list of JobSpec dicts as a batch |
+| `run_cnc_job_batch_from_paths` | Load and run JobSpec files from a path list |
+| `run_cnc_job_batch_from_directory` | Load and run all matching files from a directory |
+| `save_batch` | Save a batch report to a local JSON file |
+| `load_batch` | Load a batch report from a local JSON file |
+
+### Demo (no API key required)
+
+```bash
+python -m scripts.demo_batch_jobs
+```
+
+---
+
 ## Job Runs and Reports v0
 
 A **run** is one concrete processing of a CNCJobSpec through the full deterministic pipeline.

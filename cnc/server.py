@@ -61,6 +61,13 @@ from cnc.tools.job_io import (
     load_job_spec,
 )
 from cnc.tools.job_runs import run_job, save_run_report, load_run_report
+from cnc.tools.batch_jobs import (
+    run_job_batch,
+    run_job_batch_from_paths,
+    run_job_batch_from_directory,
+    save_batch_report,
+    load_batch_report,
+)
 
 mcp = FastMCP("genai4g-cnc")
 
@@ -1619,6 +1626,167 @@ def load_run(path: str) -> dict:
             "run_report": None,
             "path": path,
             "errors": [f"load_run: unexpected error: {exc}"],
+            "warnings": [],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Batch Job tools (Tools 27–31)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def run_cnc_job_batch(
+    jobs: list[dict],
+    output_dir: str | None = None,
+    save_artifacts: bool = False,
+    batch_name: str | None = None,
+) -> dict:
+    """Run multiple CNC JobSpec dicts through validation, postprocessing, and safety analysis.
+
+    Does NOT call an LLM. Each job is processed via the deterministic pipeline.
+    Stored ``gcode`` fields are ignored in every job.
+
+    Args:
+        jobs:           List of CNCJobSpec dicts.
+        output_dir:     Root directory for saved artifacts (required when save_artifacts=True).
+        save_artifacts: When True, save G-code and run report for each job.
+        batch_name:     Optional human-readable batch label.
+
+    Returns:
+        {"ok": bool, "batch_report": dict, "warnings": list, "errors": list}
+    """
+    try:
+        return run_job_batch(
+            jobs=jobs,
+            output_dir=output_dir,
+            save_artifacts=save_artifacts,
+            batch_name=batch_name,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "batch_report": {},
+            "warnings": [],
+            "errors": [f"run_cnc_job_batch: unexpected error: {exc}"],
+        }
+
+
+@mcp.tool()
+def run_cnc_job_batch_from_paths(
+    paths: list[str],
+    output_dir: str | None = None,
+    save_artifacts: bool = False,
+    batch_name: str | None = None,
+) -> dict:
+    """Load and run multiple CNC JobSpec JSON files from a list of paths.
+
+    Files that cannot be loaded produce a ``failed`` result entry.
+
+    Args:
+        paths:          List of local file paths to CNCJobSpec JSON files.
+        output_dir:     Root directory for saved artifacts.
+        save_artifacts: When True, save G-code and run report for each job.
+        batch_name:     Optional human-readable batch label.
+
+    Returns:
+        {"ok": bool, "batch_report": dict, "warnings": list, "errors": list}
+    """
+    try:
+        return run_job_batch_from_paths(
+            paths=paths,
+            output_dir=output_dir,
+            save_artifacts=save_artifacts,
+            batch_name=batch_name,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "batch_report": {},
+            "warnings": [],
+            "errors": [f"run_cnc_job_batch_from_paths: unexpected error: {exc}"],
+        }
+
+
+@mcp.tool()
+def run_cnc_job_batch_from_directory(
+    directory: str,
+    pattern: str = "*.json",
+    output_dir: str | None = None,
+    save_artifacts: bool = False,
+    batch_name: str | None = None,
+) -> dict:
+    """Load and run all matching CNC JobSpec JSON files from a directory.
+
+    Files are sorted stably before processing.
+
+    Args:
+        directory:      Path to the directory containing JobSpec JSON files.
+        pattern:        Glob pattern (default: ``"*.json"``).
+        output_dir:     Root directory for saved artifacts.
+        save_artifacts: When True, save G-code and run report for each job.
+        batch_name:     Optional human-readable batch label.
+
+    Returns:
+        {"ok": bool, "batch_report": dict, "warnings": list, "errors": list}
+    """
+    try:
+        return run_job_batch_from_directory(
+            directory=directory,
+            pattern=pattern,
+            output_dir=output_dir,
+            save_artifacts=save_artifacts,
+            batch_name=batch_name,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "batch_report": {},
+            "warnings": [],
+            "errors": [f"run_cnc_job_batch_from_directory: unexpected error: {exc}"],
+        }
+
+
+@mcp.tool()
+def save_batch(batch_report: dict, path: str) -> dict:
+    """Save a CNC batch report to a local JSON file.
+
+    Args:
+        batch_report: Batch report dict (from ``run_cnc_job_batch`` or similar).
+        path:         Local file path (e.g. "outputs/batches/my_batch.json").
+
+    Returns:
+        {"ok": bool, "path": str, "errors": list, "warnings": list}
+    """
+    try:
+        return save_batch_report(batch_report, path)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "path": path,
+            "errors": [f"save_batch: unexpected error: {exc}"],
+            "warnings": [],
+        }
+
+
+@mcp.tool()
+def load_batch(path: str) -> dict:
+    """Load a CNC batch report from a local JSON file.
+
+    Args:
+        path: Local file path to a batch report JSON file.
+
+    Returns:
+        {"ok": bool, "batch_report": dict | None, "path": str, "errors": list, "warnings": list}
+    """
+    try:
+        return load_batch_report(path)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "batch_report": None,
+            "path": path,
+            "errors": [f"load_batch: unexpected error: {exc}"],
             "warnings": [],
         }
 

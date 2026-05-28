@@ -17,3 +17,5 @@ outputs/*
 !outputs/runs/.gitkeep
 !outputs/gcode/
 !outputs/gcode/.gitkeep
+!outputs/batches/
+!outputs/batches/.gitkeep

@@ -85,6 +85,11 @@ Add the following to your Claude Desktop MCP configuration file.
 | `run_cnc_job` | **No** | Full deterministic run: validate + G-code + safety; optionally save outputs |
 | `save_run` | **No** | Save a run report to a local JSON file |
 | `load_run` | **No** | Load a run report from a local JSON file |
+| `run_cnc_job_batch` | **No** | Run a list of JobSpec dicts as a batch |
+| `run_cnc_job_batch_from_paths` | **No** | Load and run JobSpec files from a path list |
+| `run_cnc_job_batch_from_directory` | **No** | Load and run all matching JSON files from a directory |
+| `save_batch` | **No** | Save a batch report to a local JSON file |
+| `load_batch` | **No** | Load a batch report from a local JSON file |
 | `plan_operation` | Yes | NL prompt → OperationPlan (structured, no G-code, requires API key) |
 | `generate_gcode` | Yes | Full agentic pipeline: NL prompt → OperationPlan → G-code (requires API key) |
 
@@ -652,6 +657,83 @@ Returns `{"ok": bool, "path": str, "errors": list, "warnings": list}`.
 ```
 
 Returns `{"ok": bool, "run_report": dict | null, "path": str, "errors": list, "warnings": list}`.
+
+---
+
+---
+
+### run_cnc_job_batch (deterministic, no API key needed)
+
+```json
+{
+  "jobs": [
+    { "schema_version": "0.1", "postprocessor": "fanuc", "operation_plan": { ... } },
+    { "schema_version": "0.1", "postprocessor": "grbl",  "operation_plan": { ... } }
+  ],
+  "output_dir": "outputs/batches/my_batch",
+  "save_artifacts": true,
+  "batch_name": "my_batch"
+}
+```
+
+Returns `{"ok": bool, "batch_report": dict, "warnings": list, "errors": list}`.
+
+---
+
+### run_cnc_job_batch_from_paths (deterministic, no API key needed)
+
+```json
+{
+  "paths": [
+    "examples/jobs/drill_pattern_job.json",
+    "examples/jobs/milling_pocket_job.json"
+  ],
+  "output_dir": "outputs/batches/my_batch",
+  "save_artifacts": true
+}
+```
+
+Files that cannot be loaded appear in the batch results with `status: "failed"`.
+
+---
+
+### run_cnc_job_batch_from_directory (deterministic, no API key needed)
+
+```json
+{
+  "directory": "examples/jobs",
+  "pattern": "*.json",
+  "output_dir": "outputs/batches/my_batch",
+  "save_artifacts": true
+}
+```
+
+**Notes:**
+- Files are sorted stably before processing.
+- `pattern` defaults to `"*.json"`.
+- Returns an error if the directory does not exist or contains no matching files.
+
+---
+
+### save_batch / load_batch (deterministic, no API key needed)
+
+```json
+{ "batch_report": { ... }, "path": "outputs/batches/my_batch.json" }
+```
+
+```json
+{ "path": "outputs/batches/my_batch.json" }
+```
+
+---
+
+## Batch Jobs — important notes
+
+- Paths are **local server paths**.
+- Each job is processed independently — one failed job does not stop the rest.
+- Batch reports are **traceability artefacts** — not safety releases.
+- `status` values: `"ok"` / `"warning"` / `"mixed"` / `"failed"`.
+- No automatic approval for real machines. Expert review and simulation are always required.
 
 ---
 

@@ -1205,3 +1205,59 @@ def test_run_cnc_job_ignores_stored_gcode():
     job["gcode"] = "... [18 rows x 4 passes]"
     result = run_cnc_job(job)
     assert "18 rows" not in result.get("gcode", "")
+
+
+# ---------------------------------------------------------------------------
+# U) Batch Job tools
+# ---------------------------------------------------------------------------
+
+
+def test_run_cnc_job_batch_importable():
+    from cnc.server import run_cnc_job_batch
+    assert callable(run_cnc_job_batch)
+
+
+def test_run_cnc_job_batch_from_paths_importable():
+    from cnc.server import run_cnc_job_batch_from_paths
+    assert callable(run_cnc_job_batch_from_paths)
+
+
+def test_run_cnc_job_batch_from_directory_importable():
+    from cnc.server import run_cnc_job_batch_from_directory
+    assert callable(run_cnc_job_batch_from_directory)
+
+
+def test_save_batch_importable():
+    from cnc.server import save_batch
+    assert callable(save_batch)
+
+
+def test_load_batch_importable():
+    from cnc.server import load_batch
+    assert callable(load_batch)
+
+
+def test_run_cnc_job_batch_single_valid_job():
+    from cnc.server import create_job, run_cnc_job_batch
+    job = create_job(operation_plan=_VALID_DRILL_OP, material="aluminum_6061")
+    result = run_cnc_job_batch(jobs=[job])
+    assert result["ok"] is True
+    assert result["batch_report"]["total_jobs"] == 1
+
+
+def test_run_cnc_job_batch_from_paths_example_jobs():
+    from cnc.server import run_cnc_job_batch_from_paths
+    paths = [
+        "examples/jobs/drill_pattern_job.json",
+        "examples/jobs/milling_pocket_job.json",
+    ]
+    result = run_cnc_job_batch_from_paths(paths=paths)
+    assert result["batch_report"]["total_jobs"] == 2
+    assert result["ok"] is True
+
+
+def test_run_cnc_job_batch_from_directory_example_jobs():
+    from cnc.server import run_cnc_job_batch_from_directory
+    result = run_cnc_job_batch_from_directory(directory="examples/jobs")
+    assert result["batch_report"]["total_jobs"] >= 2
+    assert result["ok"] is True

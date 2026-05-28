@@ -1,0 +1,365 @@
+{
+  "schema_version": "0.1",
+  "run_id": "run_4c11694b-125a-4050-802f-a96c6e1f8f84",
+  "created_at": "2026-05-28T20:05:50.094131+00:00",
+  "status": "warning",
+  "job": {
+    "schema_version": "0.1",
+    "job_id": "example-drill-pattern-001",
+    "name": "Example drill pattern",
+    "description": "Three-hole drill pattern in aluminium 6061, generic metric drill.",
+    "machine_type": "drill",
+    "machine_profile": "generic_drill_mm",
+    "postprocessor": "fanuc",
+    "material": "aluminum_6061",
+    "tool_ids": [
+      "drill_5mm"
+    ],
+    "operation_plan": {
+      "machine_type": "drill",
+      "units": "mm",
+      "work_coordinate_system": "G54",
+      "safe_z": 5.0,
+      "material": "aluminum_6061",
+      "tools": [
+        {
+          "id": "T1",
+          "diameter": 5.0
+        }
+      ],
+      "operations": [
+        {
+          "type": "drill",
+          "feedrate": 100.0,
+          "spindle_speed": 1200.0,
+          "parameters": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -10.0
+          }
+        },
+        {
+          "type": "drill",
+          "feedrate": 100.0,
+          "spindle_speed": 1200.0,
+          "parameters": {
+            "x": 20.0,
+            "y": 0.0,
+            "z": -10.0
+          }
+        },
+        {
+          "type": "drill",
+          "feedrate": 100.0,
+          "spindle_speed": 1200.0,
+          "parameters": {
+            "x": 10.0,
+            "y": 15.0,
+            "z": -8.0
+          }
+        }
+      ],
+      "assumptions": [
+        "Tool diameter 5 mm assumed."
+      ],
+      "warnings": [],
+      "missing_info": []
+    },
+    "assumptions": [
+      "Tool diameter 5 mm assumed."
+    ],
+    "warnings": [],
+    "missing_info": [],
+    "metadata": {
+      "created_by": "example",
+      "units": "mm"
+    }
+  },
+  "postprocessor": "fanuc",
+  "operation_plan_validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": [
+      "Operation 0 ('drill') has no tool_number or tool_id.",
+      "Operation 1 ('drill') has no tool_number or tool_id.",
+      "Operation 2 ('drill') has no tool_number or tool_id."
+    ]
+  },
+  "guardrails": {
+    "ok": true,
+    "errors": [],
+    "warnings": [
+      "Do not assume feedrate or spindle speed from material alone."
+    ],
+    "info": [
+      "Material resolved: 'Aluminum 6061'."
+    ],
+    "material": {
+      "id": "aluminum_6061",
+      "name": "Aluminum 6061",
+      "category": "aluminum",
+      "machinability": "easy",
+      "notes": [
+        "Common machinable aluminum alloy.",
+        "Actual cutting parameters depend on tool, machine rigidity, coolant and setup."
+      ],
+      "warnings": [
+        "Do not assume feedrate or spindle speed from material alone."
+      ],
+      "supported_operations": [
+        "drill",
+        "facing",
+        "slot",
+        "pocket"
+      ]
+    },
+    "findings": [
+      {
+        "severity": "info",
+        "code": "MATERIAL_RESOLVED",
+        "message": "Material resolved: 'Aluminum 6061'.",
+        "operation_index": null
+      },
+      {
+        "severity": "warning",
+        "code": "MATERIAL_WARNING",
+        "message": "Do not assume feedrate or spindle speed from material alone.",
+        "operation_index": null
+      }
+    ]
+  },
+  "postprocess_result": {
+    "ok": true,
+    "errors": [],
+    "warnings": [
+      "operation_plan: Operation 0 ('drill') has no tool_number or tool_id.",
+      "operation_plan: Operation 1 ('drill') has no tool_number or tool_id.",
+      "operation_plan: Operation 2 ('drill') has no tool_number or tool_id."
+    ],
+    "job": {
+      "schema_version": "0.1",
+      "job_id": "example-drill-pattern-001",
+      "name": "Example drill pattern",
+      "description": "Three-hole drill pattern in aluminium 6061, generic metric drill.",
+      "machine_type": "drill",
+      "machine_profile": "generic_drill_mm",
+      "postprocessor": "fanuc",
+      "material": "aluminum_6061",
+      "tool_ids": [
+        "drill_5mm"
+      ],
+      "operation_plan": {
+        "machine_type": "drill",
+        "units": "mm",
+        "work_coordinate_system": "G54",
+        "safe_z": 5.0,
+        "material": "aluminum_6061",
+        "tools": [
+          {
+            "id": "T1",
+            "diameter": 5.0
+          }
+        ],
+        "operations": [
+          {
+            "type": "drill",
+            "feedrate": 100.0,
+            "spindle_speed": 1200.0,
+            "parameters": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": -10.0
+            }
+          },
+          {
+            "type": "drill",
+            "feedrate": 100.0,
+            "spindle_speed": 1200.0,
+            "parameters": {
+              "x": 20.0,
+              "y": 0.0,
+              "z": -10.0
+            }
+          },
+          {
+            "type": "drill",
+            "feedrate": 100.0,
+            "spindle_speed": 1200.0,
+            "parameters": {
+              "x": 10.0,
+              "y": 15.0,
+              "z": -8.0
+            }
+          }
+        ],
+        "assumptions": [
+          "Tool diameter 5 mm assumed."
+        ],
+        "warnings": [],
+        "missing_info": []
+      },
+      "assumptions": [
+        "Tool diameter 5 mm assumed."
+      ],
+      "warnings": [],
+      "missing_info": [],
+      "metadata": {
+        "created_by": "example",
+        "units": "mm"
+      }
+    },
+    "operation_plan_validation": {
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "Operation 0 ('drill') has no tool_number or tool_id.",
+        "Operation 1 ('drill') has no tool_number or tool_id.",
+        "Operation 2 ('drill') has no tool_number or tool_id."
+      ]
+    },
+    "guardrails": {
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "Do not assume feedrate or spindle speed from material alone."
+      ],
+      "info": [
+        "Material resolved: 'Aluminum 6061'."
+      ],
+      "material": {
+        "id": "aluminum_6061",
+        "name": "Aluminum 6061",
+        "category": "aluminum",
+        "machinability": "easy",
+        "notes": [
+          "Common machinable aluminum alloy.",
+          "Actual cutting parameters depend on tool, machine rigidity, coolant and setup."
+        ],
+        "warnings": [
+          "Do not assume feedrate or spindle speed from material alone."
+        ],
+        "supported_operations": [
+          "drill",
+          "facing",
+          "slot",
+          "pocket"
+        ]
+      },
+      "findings": [
+        {
+          "severity": "info",
+          "code": "MATERIAL_RESOLVED",
+          "message": "Material resolved: 'Aluminum 6061'.",
+          "operation_index": null
+        },
+        {
+          "severity": "warning",
+          "code": "MATERIAL_WARNING",
+          "message": "Do not assume feedrate or spindle speed from material alone.",
+          "operation_index": null
+        }
+      ]
+    }
+  },
+  "safety_report": {
+    "risk_level": "medium",
+    "summary": {
+      "machine_type": "drill",
+      "units": "mm",
+      "positioning_mode": "absolute",
+      "work_coordinate_system": "G54",
+      "has_program_end": true,
+      "has_feedrate": true,
+      "has_spindle_start": true,
+      "has_spindle_stop": true,
+      "line_count": 52,
+      "motion_line_count": 16,
+      "min_z": -10.0,
+      "max_z": 5.0,
+      "feedrates": [
+        100.0
+      ],
+      "spindle_speeds": [
+        1200.0
+      ],
+      "unsupported_commands": []
+    },
+    "findings": [
+      {
+        "severity": "info",
+        "code": "UNITS_DETECTED",
+        "line": null,
+        "message": "Units: MM (G21).",
+        "text": null
+      },
+      {
+        "severity": "info",
+        "code": "POSITIONING_DETECTED",
+        "line": null,
+        "message": "Positioning mode: absolute (G90).",
+        "text": null
+      },
+      {
+        "severity": "info",
+        "code": "WCS_DETECTED",
+        "line": null,
+        "message": "Work coordinate system: G54.",
+        "text": null
+      },
+      {
+        "severity": "info",
+        "code": "Z_RANGE",
+        "line": null,
+        "message": "Z range: min=-10.0, max=5.0.",
+        "text": null
+      },
+      {
+        "severity": "info",
+        "code": "MOTION_LINES",
+        "line": null,
+        "message": "Motion lines detected: 16.",
+        "text": null
+      },
+      {
+        "severity": "warning",
+        "code": "RELATIVE_POSITIONING",
+        "line": null,
+        "message": "G91 relative positioning detected. Incremental mode can cause unexpected motion if not properly initialized. Verify all moves are intentional.",
+        "text": null
+      },
+      {
+        "severity": "warning",
+        "code": "G91_NEGATIVE_Z",
+        "line": null,
+        "message": "Relative positioning (G91) combined with negative Z value (-10.0). Incremental Z moves may produce unexpected depth if origin is not correctly set.",
+        "text": null
+      }
+    ]
+  },
+  "gcode": "%\nO0001\n(GENERATED BY GENAI4G CNC — POSTPROCESSOR: FANUC)\n(CONSERVATIVE OUTPUT — REVIEW BEFORE RUNNING ON A MACHINE)\n(MACHINE TYPE: DRILL)\n(UNITS: MM)\n(WORK COORDINATE SYSTEM: G54)\n(SAFE Z: 5.0)\n(ASSUMPTIONS:)\n(  - Tool diameter 5 mm assumed.)\nG17 G40 G49 G80 (SAFETY CANCEL: PLANE/COMP/TLO/CYCLE)\nG21 (UNITS: MM)\nG90 (ABSOLUTE POSITIONING)\nG94 (FEED PER MINUTE)\nG54 (WORK COORDINATE SYSTEM)\nG00 Z5.000 (INITIAL RETRACT TO SAFE Z)\n\n(UNNAMED OPERATION — TYPE: DRILL)\n(WARNING: NO TOOL REFERENCE — SKIPPING TOOL CHANGE)\nG00 Z5.000 (RETRACT TO SAFE Z)\nS1200 M03 (SPINDLE CW)\nG00 X0.000 Y0.000 (RAPID TO HOLE POSITION)\nG01 Z-10.000 F100.000 (DRILL PLUNGE)\nG00 Z5.000 (RETRACT TO SAFE Z)\nG00 Z5.000 (RETRACT AFTER OPERATION)\nM09 (COOLANT OFF)\n\n(UNNAMED OPERATION — TYPE: DRILL)\n(WARNING: NO TOOL REFERENCE — SKIPPING TOOL CHANGE)\nG00 Z5.000 (RETRACT TO SAFE Z)\n(SPINDLE ALREADY RUNNING AT S1200 — NO RESTART)\nG00 X20.000 Y0.000 (RAPID TO HOLE POSITION)\nG01 Z-10.000 F100.000 (DRILL PLUNGE)\nG00 Z5.000 (RETRACT TO SAFE Z)\nG00 Z5.000 (RETRACT AFTER OPERATION)\nM09 (COOLANT OFF)\n\n(UNNAMED OPERATION — TYPE: DRILL)\n(WARNING: NO TOOL REFERENCE — SKIPPING TOOL CHANGE)\nG00 Z5.000 (RETRACT TO SAFE Z)\n(SPINDLE ALREADY RUNNING AT S1200 — NO RESTART)\nG00 X10.000 Y15.000 (RAPID TO HOLE POSITION)\nG01 Z-8.000 F100.000 (DRILL PLUNGE)\nG00 Z5.000 (RETRACT TO SAFE Z)\nG00 Z5.000 (RETRACT AFTER OPERATION)\nM09 (COOLANT OFF)\nM05 (SPINDLE STOP — END OF OPERATIONS)\n\nG28 G91 Z0. (RETURN Z TO HOME)\nG90\nM30 (PROGRAM END)\n%",
+  "warnings": [
+    "operation_plan: Operation 0 ('drill') has no tool_number or tool_id.",
+    "operation_plan: Operation 1 ('drill') has no tool_number or tool_id.",
+    "operation_plan: Operation 2 ('drill') has no tool_number or tool_id.",
+    "operation_plan: Operation 0 ('drill') has no tool_number or tool_id.",
+    "operation_plan: Operation 1 ('drill') has no tool_number or tool_id.",
+    "operation_plan: Operation 2 ('drill') has no tool_number or tool_id.",
+    "Operation 0 ('drill') has no tool_number or tool_id.",
+    "Operation 1 ('drill') has no tool_number or tool_id.",
+    "Operation 2 ('drill') has no tool_number or tool_id.",
+    "G91 relative positioning detected. Incremental mode can cause unexpected motion if not properly initialized. Verify all moves are intentional.",
+    "Relative positioning (G91) combined with negative Z value (-10.0). Incremental Z moves may produce unexpected depth if origin is not correctly set."
+  ],
+  "errors": [],
+  "artifacts": [
+    {
+      "kind": "gcode",
+      "path": "outputs/batches/demo_batch\\gcode\\job_0_example_drill_pattern.nc",
+      "content_preview": "%\nO0001\n(GENERATED BY GENAI4G CNC — POSTPROCESSOR: FANUC)\n(CONSERVATIVE OUTPUT — REVIEW BEFORE RUNNING ON A MACHINE)\n(MACHINE TYPE: DRILL)\n(UNITS: MM)\n(WORK COORDINATE SYSTEM: G54)\n(SAFE Z: 5.0)\n(ASSUMPTIONS:)\n(  - Tool diameter 5 mm assumed.)\nG17 G40 G49 G80 (SAFETY CANCEL: PLANE/COMP/TLO/CYCLE)\nG21 (UNITS: MM)\nG90 (ABSOLUTE POSITIONING)\nG94 (FEED PER MINUTE)\nG54 (WORK COORDINATE SYSTEM)\nG00 Z5.000 (INITIAL RETRACT TO SAFE Z)\n\n(UNNAMED OPERATION — TYPE: DRILL)\n(WARNING: NO TOOL REFERENCE — SKIP",
+      "metadata": {
+        "postprocessor": "fanuc"
+      }
+    }
+  ],
+  "metadata": {}
+}
