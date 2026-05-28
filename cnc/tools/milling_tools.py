@@ -148,6 +148,10 @@ def build_milling_facing_operation_plan(
     # --- Material ---
     if material:
         assumptions.append(f"Material: {material}")
+        from cnc.tools.material_library import normalize_material
+        mat_result = normalize_material(material)
+        if not mat_result.get("ok"):
+            warnings.extend(mat_result.get("warnings", []))
     else:
         assumptions.append("Material was not specified.")
 
@@ -192,7 +196,7 @@ def build_milling_facing_operation_plan(
     if resolved_spindle is not None:
         op["spindle_speed"] = resolved_spindle
 
-    return {
+    facing_plan: dict = {
         "machine_type": "mill",
         "units": units,
         "work_coordinate_system": work_coordinate_system,
@@ -203,6 +207,9 @@ def build_milling_facing_operation_plan(
         "warnings": warnings,
         "missing_info": missing_info,
     }
+    if material:
+        facing_plan["material"] = material
+    return facing_plan
 
 
 def generate_milling_facing_gcode_from_params(
@@ -475,6 +482,10 @@ def build_milling_slot_operation_plan(
     # --- Material & slot-width assumption ---
     if material:
         assumptions.append(f"Material: {material}")
+        from cnc.tools.material_library import normalize_material
+        mat_result = normalize_material(material)
+        if not mat_result.get("ok"):
+            warnings.extend(mat_result.get("warnings", []))
     else:
         assumptions.append("Material was not specified.")
     assumptions.append("Slot width is assumed to equal tool diameter.")
@@ -522,7 +533,7 @@ def build_milling_slot_operation_plan(
     if resolved_spindle is not None:
         op["spindle_speed"] = resolved_spindle
 
-    return {
+    slot_plan: dict = {
         "machine_type": "mill",
         "units": units,
         "work_coordinate_system": work_coordinate_system,
@@ -533,6 +544,9 @@ def build_milling_slot_operation_plan(
         "warnings": warnings,
         "missing_info": missing_info,
     }
+    if material:
+        slot_plan["material"] = material
+    return slot_plan
 
 
 def generate_milling_slot_gcode_from_params(
@@ -827,6 +841,10 @@ def build_milling_pocket_operation_plan(
     # --- Material & strategy assumptions ---
     if material:
         assumptions.append(f"Material: {material}")
+        from cnc.tools.material_library import normalize_material
+        mat_result = normalize_material(material)
+        if not mat_result.get("ok"):
+            warnings.extend(mat_result.get("warnings", []))
     else:
         assumptions.append("Material was not specified.")
     assumptions.append("Pocket toolpath is a simple raster clearing strategy.")
@@ -872,7 +890,7 @@ def build_milling_pocket_operation_plan(
     if resolved_spindle is not None:
         op["spindle_speed"] = resolved_spindle
 
-    return {
+    pocket_plan: dict = {
         "machine_type": "mill",
         "units": units,
         "work_coordinate_system": work_coordinate_system,
@@ -883,6 +901,9 @@ def build_milling_pocket_operation_plan(
         "warnings": warnings,
         "missing_info": missing_info,
     }
+    if material:
+        pocket_plan["material"] = material
+    return pocket_plan
 
 
 def generate_milling_pocket_gcode_from_params(

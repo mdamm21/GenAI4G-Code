@@ -73,6 +73,10 @@ Add the following to your Claude Desktop MCP configuration file.
 | `generate_milling_slot_gcode` | **No** | Straight slot along X or Y: explicit geometry → G-code (deterministic, no cutter comp) |
 | `generate_milling_pocket_gcode` | **No** | Rectangular pocket, raster clearing: explicit geometry → G-code (deterministic, no cutter comp) |
 | `analyze_gcode_safety_report` | **No** | Structured static safety analysis of a G-code program → risk report (deterministic) |
+| `list_available_materials` | **No** | Returns all built-in material entries (informational context only) |
+| `get_material_info` | **No** | Returns a single material entry by ID |
+| `search_materials` | **No** | Filters materials by category, operation type, or machinability |
+| `evaluate_operation_guardrails` | **No** | Plausibility checks on an OperationPlan — returns findings without modifying the plan |
 | `plan_operation` | Yes | NL prompt → OperationPlan (structured, no G-code, requires API key) |
 | `generate_gcode` | Yes | Full agentic pipeline: NL prompt → OperationPlan → G-code (requires API key) |
 
@@ -390,11 +394,101 @@ Full pipeline: NL prompt → OperationPlan → G-code → Safety report.
 ```
 
 **Notes:**
-- Agent output is **never** directly treated as G-code — only structured OperationPlans are accepted.
+- Agent output (natural language, agent-generated gcode text) is **never** directly treated as final G-code.
+- Only structured OperationPlans extracted from agent output are accepted.
 - If `missing_info` is non-empty in the agent result, `ok=False` and `gcode=""`.
-- The full pipeline runs: OperationPlan extraction → validation → postprocessor → Safety Analyzer.
+- The returned G-code is **always regenerated deterministically** from the OperationPlan:
+  `OperationPlan → validate_operation_plan → postprocess_operations → Safety Analyzer`.
+- Agent-provided `gcode` text is discarded and replaced with deterministic output.
+  (LLMs may abbreviate long G-code blocks with placeholders like `... [18 rows × 4 passes]`.)
 - Deterministic typed tools (`generate_drill_gcode`, etc.) work without an API key and are preferred
   when all parameters are known.
+
+---
+
+---
+
+### list_available_materials (deterministic, no API key needed)
+
+```json
+{}
+```
+
+Returns the built-in material library as a list. Each entry includes `id`, `name`, `category`, `machinability`, `notes`, `warnings`, and `supported_operations`.
+
+---
+
+### get_material_info (deterministic, no API key needed)
+
+```json
+{
+  "material_id": "aluminum_6061"
+}
+```
+
+Returns the matching material entry or `{"ok": false, "material": null, "error": "..."}` if unknown.
+
+---
+
+### search_materials (deterministic, no API key needed)
+
+```json
+{
+  "category": "aluminum"
+}
+```
+
+Optional filters:
+- `category`: `"aluminum"`, `"steel"`, `"stainless_steel"`, `"brass"`, `"plastic"`, `"wood"`, `"composite"`.
+- `operation_type`: `"drill"`, `"pocket"`, `"facing"`, `"slot"`.
+- `machinability`: `"easy"`, `"medium"`, `"hard"`.
+
+Returns a filtered list (empty list if no match).
+
+---
+
+### evaluate_operation_guardrails (deterministic, no API key needed)
+
+```json
+{
+  "operation_plan": {
+    "machine_type": "mill",
+    "units": "mm",
+    "work_coordinate_system": "G54",
+    "safe_z": 5,
+    "tools": [{"id": "T1", "diameter": 5}],
+    "operations": [
+      {
+        "type": "pocket",
+        "feedrate": 150,
+        "spindle_speed": 3000,
+        "parameters": {
+          "origin_x": 0, "origin_y": 0,
+          "width": 20, "height": 10, "target_z": -3,
+          "step_down": 1, "step_over": 2, "tool_diameter": 5
+        }
+      }
+    ],
+    "assumptions": [], "warnings": []
+  },
+  "material": "aluminum_6061"
+}
+```
+
+Returns `ok`, `errors`, `warnings`, `info`, `material`, and `findings`. Each finding has `severity` (`"info"` / `"warning"` / `"error"`), `code`, `message`, and `operation_index`.
+
+`ok=False` only when hard errors are present (e.g. missing `feedrate`, missing `safe_z`). Warnings (unknown material, stainless steel caution, `step_over > tool_diameter`) do not set `ok=False`.
+
+**Finding codes include:** `NO_MATERIAL`, `UNKNOWN_MATERIAL`, `STAINLESS_STEEL_CAUTION`, `WOOD_SAFETY`, `PLASTIC_HEAT`, `MISSING_SAFE_Z`, `MISSING_FEEDRATE`, `MISSING_SPINDLE`, `STEP_OVER_EXCEEDS_DIAMETER`, `STEP_DOWN_EXCEEDS_DEPTH`.
+
+---
+
+## Material Library — important notes
+
+- The Material Library is **informational context only**. It provides notes and warnings about materials but does **not** derive or recommend feedrates, spindle speeds, or cutting depths.
+- Feedrates and spindle speeds must always be supplied explicitly by the user or operator.
+- The Material Library does **not** replace a cutting database or manufacturer specifications.
+- **No automatic approval for real machines.** Expert review and simulation remain mandatory before any G-code is used on physical equipment.
 
 ---
 

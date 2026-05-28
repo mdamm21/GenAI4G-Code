@@ -51,6 +51,8 @@ from cnc.tools.milling_tools import (
     generate_milling_pocket_gcode_from_params,
 )
 from cnc.tools.machine_profiles import list_machine_profiles, get_machine_profile
+from cnc.tools.material_library import list_materials, get_material, find_materials
+from cnc.tools.parameter_guardrails import evaluate_parameter_guardrails
 
 mcp = FastMCP("genai4g-cnc")
 
@@ -1148,68 +1150,188 @@ async def generate_gcode(prompt: str, machine_type: str | None = None) -> dict:
             "postprocessor": "fanuc",
         }
 
-    # E) Validate plan
-    try:
-        plan_val = validate_operation_plan(operation_plan)
-    except Exception as exc:  # noqa: BLE001
-        plan_val = {"ok": False, "errors": [f"Plan validator raised exception: {exc}"], "warnings": []}
+    # E+F) Validate + deterministic G-code regeneration via shared pipeline.
+    # Agent-provided gcode is not used here — the pipeline always regenerates
+    # from operation_plan via validate_operation_plan → postprocess_operations.
+    from cnc.tools.gcode_pipeline import regenerate_gcode_from_operation_plan
 
-    if plan_val.get("errors"):
-        return {
-            "ok": False,
-            "gcode": "",
-            "operation_plan": operation_plan,
-            "assumptions": operation_plan.get("assumptions", []),
-            "warnings": list(operation_plan.get("warnings", [])) + list(plan_val.get("warnings", [])),
-            "errors": plan_val["errors"],
-            "missing_info": [],
-            "validation": plan_val,
-            "safety_report": None,
-            "machine_type": mt,
-            "postprocessor": "fanuc",
-        }
-
-    # F) Postprocess → G-code + safety analysis
-    try:
-        pp = postprocess_operations(operation_plan, postprocessor="fanuc")
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "ok": False,
-            "gcode": "",
-            "operation_plan": operation_plan,
-            "assumptions": operation_plan.get("assumptions", []),
-            "warnings": operation_plan.get("warnings", []),
-            "errors": [f"Postprocessor raised exception: {exc}"],
-            "missing_info": [],
-            "validation": plan_val,
-            "safety_report": None,
-            "machine_type": mt,
-            "postprocessor": "fanuc",
-        }
-
-    combined_warnings = (
-        list(operation_plan.get("warnings", []))
-        + list(plan_val.get("warnings", []))
-        + list(pp.get("warnings", []))
+    pp_result = regenerate_gcode_from_operation_plan(
+        {"operation_plan": operation_plan},
+        default_postprocessor="fanuc",
     )
 
+    plan_warnings = list(operation_plan.get("warnings", []))
+    combined_warnings = plan_warnings + pp_result.get("warnings", [])
+
+    if pp_result.get("errors"):
+        return {
+            "ok": False,
+            "gcode": "",
+            "operation_plan": operation_plan,
+            "assumptions": operation_plan.get("assumptions", []),
+            "warnings": combined_warnings,
+            "errors": pp_result.get("errors", []),
+            "missing_info": [],
+            "validation": pp_result.get("validation", {
+                "ok": False,
+                "errors": pp_result.get("errors", []),
+                "warnings": [],
+            }),
+            "safety_report": None,
+            "machine_type": mt,
+            "postprocessor": pp_result.get("postprocessor", "fanuc"),
+        }
+
+    val = pp_result.get("validation", {})
     return {
-        "ok": pp.get("ok", False),
-        "gcode": pp.get("gcode", ""),
+        "ok": pp_result.get("ok", False),
+        "gcode": pp_result.get("gcode", ""),
         "operation_plan": operation_plan,
         "assumptions": operation_plan.get("assumptions", []),
         "warnings": combined_warnings,
-        "errors": pp.get("errors", []),
+        "errors": pp_result.get("errors", []),
         "missing_info": [],
-        "validation": pp.get("validation", plan_val),
+        "validation": val,
         "safety_report": {
-            "risk_level": pp.get("risk_level", "low"),
-            "summary": pp.get("safety_summary", {}),
-            "findings": pp.get("findings", []),
+            "risk_level": val.get("risk_level", "low"),
+            "summary": val.get("summary", {}),
+            "findings": val.get("findings", []),
         },
         "machine_type": mt,
-        "postprocessor": pp.get("postprocessor", "fanuc"),
+        "postprocessor": pp_result.get("postprocessor", "fanuc"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Tool 15: list_available_materials  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_available_materials() -> list[dict]:
+    """List all built-in material library entries.
+
+    Returns informational context about workpiece materials: category,
+    machinability, notes, and caution warnings. Does NOT return cutting
+    data — feedrate, spindle speed, step_down, and step_over must always
+    be supplied explicitly.
+
+    Returns:
+        List of material dicts, each with: id, name, category, machinability,
+        notes, warnings, supported_operations.
+    """
+    return list_materials()
+
+
+# ---------------------------------------------------------------------------
+# Tool 16: get_material_info  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_material_info(material_id: str) -> dict:
+    """Get one built-in material library entry by ID.
+
+    Args:
+        material_id: Library ID, e.g. "aluminum_6061", "mild_steel".
+
+    Returns:
+        {"ok": True, "material": dict} on success.
+        {"ok": False, "error": str, "material": None} if not found.
+    """
+    material = get_material(material_id)
+    if material is None:
+        return {
+            "ok": False,
+            "error": (
+                f"Unknown material_id: {material_id!r}. "
+                "Use list_available_materials() to see available materials."
+            ),
+            "material": None,
+        }
+    return {
+        "ok": True,
+        "material": material,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tool 17: search_materials  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def search_materials(
+    category: str | None = None,
+    operation_type: str | None = None,
+    machinability: str | None = None,
+) -> list[dict]:
+    """Search built-in material library entries.
+
+    Filters are additive (AND). Omitting a filter means 'any'.
+
+    Args:
+        category:       Material category to filter by, e.g. "aluminum", "steel",
+                        "stainless_steel", "plastic", "wood", "brass".
+        operation_type: Only return materials that support this operation type,
+                        e.g. "drill", "pocket", "slot", "facing".
+        machinability:  Filter by machinability: "easy", "medium", or "hard".
+
+    Returns:
+        List of matching material dicts (may be empty).
+    """
+    return find_materials(
+        category=category,
+        operation_type=operation_type,
+        machinability=machinability,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool 18: evaluate_operation_guardrails  (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def evaluate_operation_guardrails(
+    operation_plan: dict,
+    material: str | None = None,
+) -> dict:
+    """Evaluate parameter plausibility and material context for an OperationPlan.
+
+    Does NOT generate or modify G-code. Does NOT derive cutting parameters.
+    Reports missing values, unusual combinations, and material-specific cautions.
+
+    Args:
+        operation_plan: OperationPlan dict to evaluate.
+        material:       Optional material name or library ID to evaluate against
+                        (e.g. "aluminum_6061", "Mild steel"). Overrides
+                        ``operation_plan.get("material")`` if set.
+
+    Returns:
+        {
+          "ok":       bool,
+          "errors":   list[str],
+          "warnings": list[str],
+          "info":     list[str],
+          "material": dict | None,
+          "findings": list[{"severity", "code", "message", "operation_index"}],
+        }
+    """
+    try:
+        return evaluate_parameter_guardrails(
+            operation_plan=operation_plan,
+            material=material,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "errors": [f"evaluate_operation_guardrails: unexpected error: {exc}"],
+            "warnings": [],
+            "info": [],
+            "material": None,
+            "findings": [],
+        }
 
 
 # ---------------------------------------------------------------------------

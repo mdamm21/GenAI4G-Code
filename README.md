@@ -431,6 +431,113 @@ python scripts/demo_safety_analyzer.py
 
 ---
 
+## Material Library v0 and Parameter Guardrails
+
+The material library provides **informational context** about workpiece materials. It is NOT a cutting data database — feedrate, spindle speed, step_down, and step_over must always be supplied explicitly.
+
+### Material Library
+
+| ID | Name | Category | Machinability |
+|---|---|---|---|
+| `aluminum_6061` | Aluminum 6061 | aluminum | easy |
+| `aluminum_generic` | Aluminum (generic) | aluminum | easy |
+| `mild_steel` | Mild steel | steel | medium |
+| `stainless_steel_generic` | Generic stainless steel | stainless_steel | hard |
+| `acrylic` | Acrylic | plastic | medium |
+| `plywood` | Plywood | wood | easy |
+| `brass_generic` | Brass (generic) | brass | easy |
+
+Each material entry contains: `notes` (informational), `warnings` (cautions), `supported_operations`.
+
+### Parameter Guardrails
+
+`evaluate_parameter_guardrails(operation_plan, material)` checks for:
+
+- Missing material → warning
+- Unknown material → warning
+- Stainless steel → `"Stainless steel requires conservative, verified cutting parameters."`
+- Wood → `"Wood machining may require dust extraction and fire-risk controls."`
+- Plastic → `"Plastic machining may require chip evacuation and heat control."`
+- Unsupported operation for material → warning
+- Missing feedrate → error
+- Missing spindle_speed → warning
+- Missing safe_z → error
+- step_over > tool_diameter → warning (may leave uncut material)
+- step_down > total depth → warning
+
+Guardrails **never** modify the plan and **never** derive cutting parameters.
+
+### New MCP Tools
+
+| Tool | Description |
+|---|---|
+| `list_available_materials` | List all built-in material library entries |
+| `get_material_info(material_id)` | Get one material entry by ID |
+| `search_materials(category, operation_type, machinability)` | Filter materials |
+| `evaluate_operation_guardrails(operation_plan, material)` | Run guardrail checks |
+
+### Material integration
+
+When `material` is passed to deterministic tools (`generate_drill_gcode`, `generate_milling_pocket_gcode`, etc.), it is stored in `operation_plan["material"]` and validated by `validate_operation_plan` (missing material adds a warning). The `evaluate_operation_guardrails` tool can then be called for deeper context checks.
+
+**Demo (no API key required):**
+
+```bash
+python -m scripts.demo_material_guardrails
+```
+
+---
+
+## Deterministic G-code Regeneration
+
+A fundamental safety principle in GENAI4G-CODE: **agent-generated G-code text is never
+trusted as final output.**
+
+LLMs may abbreviate long G-code blocks in their JSON responses, e.g.:
+
+```
+"gcode": "G21\n... [18 rows × 4 passes]\nM30"
+```
+
+Such output is silently incomplete and would be dangerous on a real machine.
+
+### How it works
+
+Whenever an `OperationPlan` is present in an agent result, the pipeline always
+discards the agent's `gcode` field and regenerates G-code deterministically:
+
+```
+OperationPlan
+    │
+    ▼
+validate_operation_plan    ← structural + safety checks
+    │
+    ▼
+postprocess_operations     ← deterministic, schema-driven G-code
+    │
+    ▼
+validate_gcode_text        ← static safety analysis + risk level
+```
+
+This is implemented in `cnc/tools/gcode_pipeline.py` via `regenerate_gcode_from_operation_plan()`.
+
+### Guarantees
+
+- Agent `gcode` text is discarded whenever `operation_plan` is present.
+- A warning is added to the result: `"Agent-provided gcode was discarded and regenerated deterministically from operation_plan."`
+- Invalid `OperationPlan` → `gcode=""` and validation errors (old agent G-code is NOT kept).
+- `operation_plan` returned as a list → first item is used with a warning.
+- Postprocessor selection order: `result["postprocessor"]` → `operation_plan["postprocessor"]` → `default_postprocessor`.
+- The same pipeline is used in both `CNCAgent.run()` and the MCP `generate_gcode` tool.
+
+### Demo (no API key required)
+
+```bash
+python scripts/demo_deterministic_regeneration.py
+```
+
+---
+
 ## Run tests
 
 ```bash

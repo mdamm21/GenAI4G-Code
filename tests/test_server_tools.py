@@ -824,3 +824,205 @@ def test_generate_gcode_has_safety_report(monkeypatch):
     if result["ok"]:
         assert result["safety_report"] is not None
         assert "risk_level" in result["safety_report"]
+
+
+# ---------------------------------------------------------------------------
+# M) list_available_materials (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+def test_list_available_materials_importable():
+    from cnc.server import list_available_materials
+    assert callable(list_available_materials)
+
+
+def test_list_available_materials_returns_list():
+    from cnc.server import list_available_materials
+    result = list_available_materials()
+    assert isinstance(result, list)
+    assert len(result) > 0
+
+
+def test_list_available_materials_contains_aluminum_6061():
+    from cnc.server import list_available_materials
+    ids = [m["id"] for m in list_available_materials()]
+    assert "aluminum_6061" in ids
+
+
+def test_list_available_materials_contains_mild_steel():
+    from cnc.server import list_available_materials
+    ids = [m["id"] for m in list_available_materials()]
+    assert "mild_steel" in ids
+
+
+def test_list_available_materials_each_has_required_keys():
+    from cnc.server import list_available_materials
+    for m in list_available_materials():
+        for key in ("id", "name", "category", "machinability"):
+            assert key in m, f"Material {m.get('id')!r} missing key {key!r}"
+
+
+# ---------------------------------------------------------------------------
+# N) get_material_info (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+def test_get_material_info_importable():
+    from cnc.server import get_material_info
+    assert callable(get_material_info)
+
+
+def test_get_material_info_aluminum_ok():
+    from cnc.server import get_material_info
+    result = get_material_info("aluminum_6061")
+    assert result["ok"] is True
+
+
+def test_get_material_info_aluminum_returns_material():
+    from cnc.server import get_material_info
+    result = get_material_info("aluminum_6061")
+    assert result["material"] is not None
+    assert result["material"]["id"] == "aluminum_6061"
+
+
+def test_get_material_info_aluminum_category():
+    from cnc.server import get_material_info
+    result = get_material_info("aluminum_6061")
+    assert result["material"]["category"] == "aluminum"
+
+
+def test_get_material_info_unknown_not_ok():
+    from cnc.server import get_material_info
+    result = get_material_info("unobtainium")
+    assert result["ok"] is False
+    assert result["material"] is None
+
+
+def test_get_material_info_has_error_on_unknown():
+    from cnc.server import get_material_info
+    result = get_material_info("not_a_real_material")
+    assert result.get("error") or result.get("errors")
+
+
+# ---------------------------------------------------------------------------
+# O) search_materials (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+
+def test_search_materials_importable():
+    from cnc.server import search_materials
+    assert callable(search_materials)
+
+
+def test_search_materials_by_category_aluminum():
+    from cnc.server import search_materials
+    result = search_materials(category="aluminum")
+    assert isinstance(result, list)
+    assert len(result) > 0
+    for m in result:
+        assert m["category"] == "aluminum"
+
+
+def test_search_materials_aluminum_contains_6061():
+    from cnc.server import search_materials
+    ids = [m["id"] for m in search_materials(category="aluminum")]
+    assert "aluminum_6061" in ids
+
+
+def test_search_materials_no_filters_returns_all():
+    from cnc.server import search_materials, list_available_materials
+    assert len(search_materials()) == len(list_available_materials())
+
+
+def test_search_materials_unknown_category_empty():
+    from cnc.server import search_materials
+    result = search_materials(category="unobtainium_category")
+    assert result == []
+
+
+def test_search_materials_by_operation_pocket():
+    from cnc.server import search_materials
+    result = search_materials(operation_type="pocket")
+    ids = [m["id"] for m in result]
+    assert "aluminum_6061" in ids
+
+
+# ---------------------------------------------------------------------------
+# P) evaluate_operation_guardrails (deterministic, no LLM required)
+# ---------------------------------------------------------------------------
+
+_VALID_MILLING_PLAN = {
+    "machine_type": "mill",
+    "units": "mm",
+    "work_coordinate_system": "G54",
+    "safe_z": 5.0,
+    "tools": [{"id": "T1", "diameter": 5.0}],
+    "operations": [
+        {
+            "type": "pocket",
+            "feedrate": 150.0,
+            "spindle_speed": 3000.0,
+            "parameters": {
+                "origin_x": 0.0,
+                "origin_y": 0.0,
+                "width": 20.0,
+                "height": 10.0,
+                "target_z": -3.0,
+                "step_down": 1.0,
+                "step_over": 2.0,
+                "tool_diameter": 5.0,
+            },
+        }
+    ],
+    "assumptions": [],
+    "warnings": [],
+}
+
+
+def test_evaluate_operation_guardrails_importable():
+    from cnc.server import evaluate_operation_guardrails
+    assert callable(evaluate_operation_guardrails)
+
+
+def test_evaluate_operation_guardrails_valid_plan_ok():
+    from cnc.server import evaluate_operation_guardrails
+    result = evaluate_operation_guardrails(_VALID_MILLING_PLAN, material="aluminum_6061")
+    assert result["ok"] is True
+
+
+def test_evaluate_operation_guardrails_valid_plan_no_errors():
+    from cnc.server import evaluate_operation_guardrails
+    result = evaluate_operation_guardrails(_VALID_MILLING_PLAN, material="aluminum_6061")
+    assert result["errors"] == []
+
+
+def test_evaluate_operation_guardrails_material_resolved():
+    from cnc.server import evaluate_operation_guardrails
+    result = evaluate_operation_guardrails(_VALID_MILLING_PLAN, material="aluminum_6061")
+    assert result["material"] is not None
+    assert result["material"]["id"] == "aluminum_6061"
+
+
+def test_evaluate_operation_guardrails_has_required_keys():
+    from cnc.server import evaluate_operation_guardrails
+    result = evaluate_operation_guardrails(_VALID_MILLING_PLAN)
+    for key in ("ok", "errors", "warnings", "info", "material", "findings"):
+        assert key in result, f"Missing key: {key!r}"
+
+
+def test_evaluate_operation_guardrails_no_material_warning():
+    from cnc.server import evaluate_operation_guardrails
+    result = evaluate_operation_guardrails(_VALID_MILLING_PLAN)
+    assert result["ok"] is True  # warning, not error
+    warnings_text = " ".join(result.get("warnings", []))
+    assert "Material" in warnings_text or "material" in warnings_text
+
+
+def test_evaluate_operation_guardrails_missing_feedrate_not_ok():
+    from cnc.server import evaluate_operation_guardrails
+    plan = {**_VALID_MILLING_PLAN, "operations": [
+        {k: v for k, v in _VALID_MILLING_PLAN["operations"][0].items() if k != "feedrate"}
+    ]}
+    result = evaluate_operation_guardrails(plan, material="aluminum_6061")
+    assert result["ok"] is False
+    assert result["errors"]

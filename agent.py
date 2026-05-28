@@ -60,7 +60,22 @@ def main(prompt: str | None = None) -> None:
         print(f"  [MISS]  {missing}")
 
     gcode = result.get("gcode", "")
-    if gcode:
+
+    # Agent may return gcode as a dict of named programs — display each cleanly
+    if isinstance(gcode, dict):
+        print("\n--- G-CODE (multiple programs) ---")
+        for prog_name, prog_code in gcode.items():
+            if prog_code:
+                print(f"\n[{prog_name}]")
+                print(prog_code)
+            else:
+                print(f"\n[{prog_name}] (empty)")
+    elif isinstance(gcode, list):
+        print("\n--- G-CODE (program list) ---")
+        for i, prog_code in enumerate(gcode, 1):
+            print(f"\n[Program {i}]")
+            print(prog_code)
+    elif gcode:
         print("\n--- G-CODE ---")
         print(gcode)
     else:

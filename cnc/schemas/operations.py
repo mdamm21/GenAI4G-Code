@@ -32,6 +32,7 @@ class OperationPlan(BaseModel):
     units: Literal["mm", "inch"] = "mm"
     work_coordinate_system: str = "G54"
     safe_z: float = 10.0
+    material: str | None = None  # optional workpiece material (name or library ID)
     tools: list[ToolSpec] = []
     operations: list[Operation] = []
     assumptions: list[str] = []

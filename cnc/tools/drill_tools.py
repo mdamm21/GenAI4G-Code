@@ -69,6 +69,10 @@ def build_drill_operation_plan(
     # --- Material ---
     if material:
         assumptions.append(f"Material: {material}")
+        from cnc.tools.material_library import normalize_material
+        mat_result = normalize_material(material)
+        if not mat_result.get("ok"):
+            warnings.extend(mat_result.get("warnings", []))
     else:
         assumptions.append("Material was not specified.")
 
@@ -107,7 +111,7 @@ def build_drill_operation_plan(
     if spindle_speed is not None:
         operation["spindle_speed"] = spindle_speed
 
-    return {
+    plan: dict = {
         "machine_type": "drill",
         "units": units,
         "work_coordinate_system": work_coordinate_system,
@@ -118,6 +122,9 @@ def build_drill_operation_plan(
         "warnings": warnings,
         "missing_info": [],
     }
+    if material:
+        plan["material"] = material
+    return plan
 
 
 def generate_drill_gcode_from_params(
@@ -338,6 +345,10 @@ def build_drill_pattern_operation_plan(
 
     if material:
         assumptions.append(f"Material: {material}")
+        from cnc.tools.material_library import normalize_material
+        mat_result = normalize_material(material)
+        if not mat_result.get("ok"):
+            warnings.extend(mat_result.get("warnings", []))
     else:
         assumptions.append("Material was not specified.")
 
@@ -398,7 +409,7 @@ def build_drill_pattern_operation_plan(
 
         operations.append(op)
 
-    return {
+    plan: dict = {
         "machine_type": "drill",
         "units": units,
         "work_coordinate_system": work_coordinate_system,
@@ -409,6 +420,9 @@ def build_drill_pattern_operation_plan(
         "warnings": warnings,
         "missing_info": missing_info,
     }
+    if material:
+        plan["material"] = material
+    return plan
 
 
 def generate_drill_pattern_gcode_from_params(

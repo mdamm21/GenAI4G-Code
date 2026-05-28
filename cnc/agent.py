@@ -113,9 +113,18 @@ If the request requires any other operation, return missing_info explaining this
 
 ## Final response format
 After all tool calls are done, return ONLY a JSON object. No prose. No code fences.
+
+IMPORTANT:
+- "gcode" MUST be a plain string — the full G-code text, or an empty string.
+- "gcode" must NEVER be a dict, list, or nested object.
+- If multiple operations were postprocessed, concatenate all resulting G-code into
+  a single string (one program end M30 at the end).
+- "operation_plan" should be the single combined OperationPlan dict with ALL
+  operations in its "operations" list — never a list of separate plans.
+
 {
-  "gcode": "<validated G-code string, or empty string if no G-code>",
-  "operation_plan": <OperationPlan dict or null>,
+  "gcode": "<full G-code text as a single string, or empty string>",
+  "operation_plan": <single OperationPlan dict with all operations, or null>,
   "assumptions": ["..."],
   "warnings": ["..."],
   "missing_info": ["..."],
@@ -301,6 +310,9 @@ class CNCAgent:
         user_message = (
             f"Plan this manufacturing job and return a structured OperationPlan JSON.\n\n"
             f"JobSpec:\n{json.dumps(job_spec, indent=2)}\n\n"
+            "IMPORTANT: Return a SINGLE OperationPlan JSON object.\n"
+            "If the job requires multiple operations (e.g. pocket + slot), include ALL of them "
+            "in the 'operations' list of the SAME plan — do NOT return multiple separate plans.\n"
             "Return ONLY the OperationPlan JSON object. No prose, no code fences."
         )
 
@@ -423,6 +435,15 @@ class CNCAgent:
             "errors": ["No validation result in response."],
             "warnings": [],
         })
+
+        # Always regenerate G-code deterministically from operation_plan.
+        # The agent's text response may abbreviate or truncate the G-code — never trust it.
+        from cnc.tools.gcode_pipeline import regenerate_gcode_from_operation_plan
+        result = regenerate_gcode_from_operation_plan(
+            result,
+            default_postprocessor="fanuc",
+            allow_plan_list_first_item=True,
+        )
 
         return result
 

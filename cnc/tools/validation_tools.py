@@ -367,5 +367,12 @@ def validate_operation_plan(operation_plan: dict) -> dict:
                     "Spindle start (M03) will be skipped."
                 )
 
+    # --- Material check (informational warning — never an error) ---
+    if not operation_plan.get("material"):
+        warnings.append(
+            "Material was not specified. "
+            "Specify a material for guardrail checks and documentation."
+        )
+
     ok = len(errors) == 0
     return {"ok": ok, "errors": errors, "warnings": warnings}
