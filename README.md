@@ -538,6 +538,154 @@ python scripts/demo_deterministic_regeneration.py
 
 ---
 
+## JSON JobSpec Import/Export v0
+
+CNC jobs can be saved to and loaded from JSON files using the **CNCJobSpec** format. A job spec is a
+reproducible container that bundles everything needed to regenerate G-code deterministically.
+
+### What a JobSpec contains
+
+| Field | Purpose |
+|---|---|
+| `schema_version` | Format version (`"0.1"`) |
+| `job_id` | Auto-generated UUID |
+| `name` / `description` | Human-readable labels |
+| `machine_type` | `"mill"` / `"drill"` / ... |
+| `machine_profile` | Profile name (e.g. `"generic_mill_mm"`) |
+| `material` | Material name or library ID (e.g. `"aluminum_6061"`) |
+| `tool_ids` | Tool references |
+| `postprocessor` | `"fanuc"` / `"grbl"` / `"linuxcnc"` |
+| `operation_plan` | The technical truth — OperationPlan dict |
+| `metadata` | Arbitrary key-value context |
+| `assumptions` / `warnings` / `missing_info` | Propagated from OperationPlan |
+
+### G-code is never stored
+
+**`gcode` fields are not stored in a job spec.** G-code is always regenerated deterministically
+from `operation_plan` via the postprocessor pipeline. If a loaded job contains a `gcode` field
+it is ignored and a warning is returned.
+
+### Python API
+
+```python
+from cnc.tools.job_io import create_job_spec, validate_job_spec, job_spec_to_gcode
+from cnc.tools.job_io import save_job_spec, load_job_spec
+
+# Create a job spec from an OperationPlan
+job = create_job_spec(operation_plan, material="aluminum_6061", postprocessor="fanuc")
+
+# Save and reload
+save_job_spec(job, "examples/jobs/my_job.json")
+loaded = load_job_spec("examples/jobs/my_job.json")
+
+# Validate
+val = validate_job_spec(loaded["job"])
+
+# Regenerate G-code
+result = job_spec_to_gcode(loaded["job"])
+print(result["gcode"])
+```
+
+### New MCP tools
+
+| Tool | Description |
+|---|---|
+| `create_job` | Create a job spec from an OperationPlan |
+| `validate_job` | Validate a job spec without generating G-code |
+| `generate_gcode_from_job` | Regenerate G-code from a job spec (stored G-code ignored) |
+| `save_job` | Save a job spec to a local JSON file |
+| `load_job` | Load a job spec from a local JSON file |
+
+### Example job files
+
+```
+examples/jobs/drill_pattern_job.json    — 3-hole drill pattern, Al6061
+examples/jobs/milling_pocket_job.json  — 20x10x3 mm pocket, Al6061
+```
+
+### Demo (no API key required)
+
+```bash
+python -m scripts.demo_job_io
+```
+
+---
+
+## Job Runs and Reports v0
+
+A **run** is one concrete processing of a CNCJobSpec through the full deterministic pipeline.
+The resulting **run report** documents everything that happened for traceability.
+
+### What a run does
+
+```
+CNCJobSpec
+    │
+    ▼
+validate_job_spec        ← structural checks, guardrails, material, profile
+    │
+    ▼
+job_spec_to_gcode        ← deterministic postprocessor pipeline
+    │
+    ▼
+CNCRunReport             ← bundles all results + G-code + artifacts
+```
+
+### Run Report structure
+
+| Field | Description |
+|---|---|
+| `schema_version` | `"0.1"` |
+| `run_id` | Auto-generated `run_<uuid4>` |
+| `created_at` | UTC ISO 8601 timestamp |
+| `status` | `"ok"` / `"warning"` / `"failed"` |
+| `job` | Input CNCJobSpec |
+| `postprocessor` | Dialect used |
+| `operation_plan_validation` | Result of `validate_operation_plan` |
+| `guardrails` | Result of `evaluate_parameter_guardrails` |
+| `postprocess_result` | OperationPlan validation from postprocessor |
+| `safety_report` | G-code static safety analysis |
+| `gcode` | Final deterministic G-code (empty if `status == "failed"`) |
+| `warnings` / `errors` | Aggregated from all pipeline stages |
+| `artifacts` | Files saved during the run (G-code, report) |
+
+### Key properties
+
+- **No LLM.** `run_job` calls no external API.
+- **Stored G-code ignored.** Any `gcode` field in the job is discarded; a warning is added.
+- **Run reports are traceability artefacts** — not safety releases or G-code authorities.
+- G-code and run report can optionally be saved to files.
+
+### Python API
+
+```python
+from cnc.tools.job_runs import run_job, save_run_report, load_run_report
+
+result = run_job(
+    job,
+    save_gcode_path="outputs/gcode/my_job.nc",
+    save_report_path="outputs/runs/my_run.json",
+)
+print(result["run_report"]["status"])   # "ok" / "warning" / "failed"
+print(result["gcode"][:200])
+```
+
+### New MCP tools
+
+| Tool | Description |
+|---|---|
+| `run_cnc_job` | Run a JobSpec through the full pipeline; optionally save G-code + report |
+| `save_run` | Save a run report dict to a local JSON file |
+| `load_run` | Load a run report dict from a local JSON file |
+
+### Demo (no API key required)
+
+```bash
+python -m scripts.demo_job_run_report
+```
+
+---
+
 ## Run tests
 
 ```bash

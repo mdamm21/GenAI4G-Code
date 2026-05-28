@@ -77,6 +77,14 @@ Add the following to your Claude Desktop MCP configuration file.
 | `get_material_info` | **No** | Returns a single material entry by ID |
 | `search_materials` | **No** | Filters materials by category, operation type, or machinability |
 | `evaluate_operation_guardrails` | **No** | Plausibility checks on an OperationPlan — returns findings without modifying the plan |
+| `create_job` | **No** | Create a reproducible JSON job spec from an OperationPlan |
+| `validate_job` | **No** | Validate a job spec without generating G-code |
+| `generate_gcode_from_job` | **No** | Regenerate deterministic G-code from a job spec (stored G-code ignored) |
+| `save_job` | **No** | Save a job spec to a local JSON file |
+| `load_job` | **No** | Load a job spec from a local JSON file |
+| `run_cnc_job` | **No** | Full deterministic run: validate + G-code + safety; optionally save outputs |
+| `save_run` | **No** | Save a run report to a local JSON file |
+| `load_run` | **No** | Load a run report from a local JSON file |
 | `plan_operation` | Yes | NL prompt → OperationPlan (structured, no G-code, requires API key) |
 | `generate_gcode` | Yes | Full agentic pipeline: NL prompt → OperationPlan → G-code (requires API key) |
 
@@ -480,6 +488,191 @@ Returns `ok`, `errors`, `warnings`, `info`, `material`, and `findings`. Each fin
 `ok=False` only when hard errors are present (e.g. missing `feedrate`, missing `safe_z`). Warnings (unknown material, stainless steel caution, `step_over > tool_diameter`) do not set `ok=False`.
 
 **Finding codes include:** `NO_MATERIAL`, `UNKNOWN_MATERIAL`, `STAINLESS_STEEL_CAUTION`, `WOOD_SAFETY`, `PLASTIC_HEAT`, `MISSING_SAFE_Z`, `MISSING_FEEDRATE`, `MISSING_SPINDLE`, `STEP_OVER_EXCEEDS_DIAMETER`, `STEP_DOWN_EXCEEDS_DEPTH`.
+
+---
+
+---
+
+### create_job (deterministic, no API key needed)
+
+```json
+{
+  "operation_plan": {
+    "machine_type": "drill",
+    "units": "mm",
+    "work_coordinate_system": "G54",
+    "safe_z": 5,
+    "tools": [{"id": "T1", "diameter": 5}],
+    "operations": [
+      {
+        "type": "drill",
+        "feedrate": 100,
+        "spindle_speed": 1200,
+        "parameters": {"x": 0, "y": 0, "z": -5}
+      }
+    ],
+    "assumptions": [], "warnings": [], "missing_info": []
+  },
+  "name": "My drill job",
+  "machine_profile": "generic_drill_mm",
+  "material": "aluminum_6061",
+  "postprocessor": "fanuc"
+}
+```
+
+Returns a `CNCJobSpec`-compatible dict with `schema_version`, `job_id`, `operation_plan`, and all
+context fields. Does NOT generate G-code.
+
+---
+
+### validate_job (deterministic, no API key needed)
+
+```json
+{
+  "job": { "schema_version": "0.1", "postprocessor": "fanuc", "operation_plan": { ... } }
+}
+```
+
+Runs structural checks, machine_type consistency, profile/material/tool_id lookups,
+`validate_operation_plan`, and `evaluate_parameter_guardrails`.
+
+Returns `ok`, `errors`, `warnings`, `job`, `operation_plan_validation`, `guardrails`.
+
+---
+
+### generate_gcode_from_job (deterministic, no API key needed)
+
+```json
+{
+  "job": { "schema_version": "0.1", "postprocessor": "fanuc", "operation_plan": { ... } }
+}
+```
+
+**Notes:**
+- Any stored `gcode` field in the job is **ignored** — a warning is added.
+- G-code is always regenerated from `operation_plan` via the postprocessor pipeline.
+- Returns `ok`, `gcode`, `job`, `validation`, `warnings`, `errors`, `postprocessor`, `safety_report`.
+- The `operation_plan` is the truth. Stored G-code is never the truth.
+
+---
+
+### save_job (deterministic, no API key needed)
+
+```json
+{
+  "job": { "schema_version": "0.1", "postprocessor": "fanuc", "operation_plan": { ... } },
+  "path": "examples/jobs/my_job.json"
+}
+```
+
+**Notes:**
+- Path is resolved relative to the server's working directory (or as an absolute path).
+- File is written as UTF-8 JSON with 2-space indentation.
+- Do NOT store secrets (API keys, passwords) in job specs.
+- Returns `{"ok": bool, "path": str, "errors": list, "warnings": list}`.
+
+---
+
+### load_job (deterministic, no API key needed)
+
+```json
+{
+  "path": "examples/jobs/drill_pattern_job.json"
+}
+```
+
+**Notes:**
+- Path is resolved relative to the server's working directory (or as an absolute path).
+- Returns `{"ok": bool, "job": dict | null, "path": str, "errors": list, "warnings": list}`.
+- If the file contains a `gcode` field a warning is added; use `generate_gcode_from_job` to regenerate.
+
+---
+
+---
+
+### run_cnc_job (deterministic, no API key needed)
+
+```json
+{
+  "job": {
+    "schema_version": "0.1",
+    "postprocessor": "fanuc",
+    "material": "aluminum_6061",
+    "operation_plan": {
+      "machine_type": "drill",
+      "units": "mm",
+      "work_coordinate_system": "G54",
+      "safe_z": 5,
+      "tools": [{"id": "T1", "diameter": 5}],
+      "operations": [
+        {
+          "type": "drill",
+          "feedrate": 100,
+          "spindle_speed": 1200,
+          "parameters": {"x": 0, "y": 0, "z": -5}
+        }
+      ],
+      "assumptions": [], "warnings": [], "missing_info": []
+    }
+  },
+  "save_gcode_path": "outputs/gcode/my_job.nc",
+  "save_report_path": "outputs/runs/my_run.json"
+}
+```
+
+**Notes:**
+- `save_gcode_path` and `save_report_path` are optional. Omit to skip file output.
+- Any stored `gcode` field in the job is **ignored** — a warning is added.
+- G-code is always regenerated from `operation_plan`.
+- Returns `ok`, `run_report`, `gcode`, `warnings`, `errors`, `artifacts`.
+- `run_report.status`: `"ok"` / `"warning"` / `"failed"`.
+- `run_report` includes `operation_plan_validation`, `guardrails`, `safety_report`, `artifacts`.
+
+---
+
+### save_run (deterministic, no API key needed)
+
+```json
+{
+  "run_report": { "schema_version": "0.1", "run_id": "run_...", "status": "ok", ... },
+  "path": "outputs/runs/my_run.json"
+}
+```
+
+Returns `{"ok": bool, "path": str, "errors": list, "warnings": list}`.
+
+---
+
+### load_run (deterministic, no API key needed)
+
+```json
+{
+  "path": "outputs/runs/my_run.json"
+}
+```
+
+Returns `{"ok": bool, "run_report": dict | null, "path": str, "errors": list, "warnings": list}`.
+
+---
+
+## Job Runs — important notes
+
+- Paths in `run_cnc_job`, `save_run`, and `load_run` are **local server paths**.
+- Do **not** store secrets in run reports.
+- Run reports are **traceability artefacts** — they document what happened during one run.
+  They are **not** safety releases or G-code approval records.
+- No automatic approval for real machines. Expert review and simulation are always required
+  before using any generated G-code on physical equipment.
+
+---
+
+## Job Import/Export — important notes
+
+- Paths in `save_job` / `load_job` are **local server paths** — they must be accessible to the process running `cnc.server`.
+- Do **not** store secrets (API keys, credentials, passwords) in job spec files.
+- A stored `gcode` field in a job spec is **not the truth** — `operation_plan` is the truth.
+  Use `generate_gcode_from_job` to always get deterministic, up-to-date G-code.
+- Example job files are in `examples/jobs/`.
 
 ---
 

@@ -1,0 +1,51 @@
+{
+  "schema_version": "0.1",
+  "job_id": "example-drill-pattern-001",
+  "name": "Example drill pattern",
+  "description": "Three-hole drill pattern in aluminium 6061, generic metric drill.",
+  "machine_type": "drill",
+  "machine_profile": "generic_drill_mm",
+  "postprocessor": "fanuc",
+  "material": "aluminum_6061",
+  "tool_ids": ["drill_5mm"],
+  "operation_plan": {
+    "machine_type": "drill",
+    "units": "mm",
+    "work_coordinate_system": "G54",
+    "safe_z": 5.0,
+    "material": "aluminum_6061",
+    "tools": [
+      {"id": "T1", "diameter": 5.0}
+    ],
+    "operations": [
+      {
+        "type": "drill",
+        "feedrate": 100.0,
+        "spindle_speed": 1200.0,
+        "parameters": {"x": 0.0, "y": 0.0, "z": -10.0}
+      },
+      {
+        "type": "drill",
+        "feedrate": 100.0,
+        "spindle_speed": 1200.0,
+        "parameters": {"x": 20.0, "y": 0.0, "z": -10.0}
+      },
+      {
+        "type": "drill",
+        "feedrate": 100.0,
+        "spindle_speed": 1200.0,
+        "parameters": {"x": 10.0, "y": 15.0, "z": -8.0}
+      }
+    ],
+    "assumptions": ["Tool diameter 5 mm assumed."],
+    "warnings": [],
+    "missing_info": []
+  },
+  "assumptions": ["Tool diameter 5 mm assumed."],
+  "warnings": [],
+  "missing_info": [],
+  "metadata": {
+    "created_by": "example",
+    "units": "mm"
+  }
+}

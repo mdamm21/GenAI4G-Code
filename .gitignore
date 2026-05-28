@@ -9,3 +9,11 @@ dist/
 build/
 .venv/
 venv/
+
+# Generated outputs — keep directory structure, ignore generated files
+outputs/*
+!outputs/.gitkeep
+!outputs/runs/
+!outputs/runs/.gitkeep
+!outputs/gcode/
+!outputs/gcode/.gitkeep

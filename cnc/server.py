@@ -53,6 +53,14 @@ from cnc.tools.milling_tools import (
 from cnc.tools.machine_profiles import list_machine_profiles, get_machine_profile
 from cnc.tools.material_library import list_materials, get_material, find_materials
 from cnc.tools.parameter_guardrails import evaluate_parameter_guardrails
+from cnc.tools.job_io import (
+    create_job_spec,
+    validate_job_spec,
+    job_spec_to_gcode,
+    save_job_spec,
+    load_job_spec,
+)
+from cnc.tools.job_runs import run_job, save_run_report, load_run_report
 
 mcp = FastMCP("genai4g-cnc")
 
@@ -1331,6 +1339,287 @@ def evaluate_operation_guardrails(
             "info": [],
             "material": None,
             "findings": [],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Job Import/Export tools (Tools 19–23)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def create_job(
+    operation_plan: dict,
+    name: str | None = None,
+    description: str | None = None,
+    machine_profile: str | None = None,
+    material: str | None = None,
+    tool_ids: list[str] | None = None,
+    postprocessor: str = "fanuc",
+    metadata: dict | None = None,
+) -> dict:
+    """Create a reproducible JSON CNC job spec from an OperationPlan.
+
+    Bundles the OperationPlan with machine_profile, material, tool_ids,
+    postprocessor, and metadata into a single serialisable job spec.
+    Does NOT generate G-code.
+
+    Args:
+        operation_plan:  OperationPlan dict (must not contain G-code).
+        name:            Human-readable job name.
+        description:     Optional description.
+        machine_profile: Machine profile name (e.g. "generic_mill_mm").
+        material:        Material name or library ID (e.g. "aluminum_6061").
+        tool_ids:        List of tool IDs referenced in the job.
+        postprocessor:   Postprocessor dialect for G-code regeneration.
+        metadata:        Arbitrary key-value metadata (no secrets).
+
+    Returns:
+        CNCJobSpec-compatible dict with schema_version, operation_plan, etc.
+    """
+    try:
+        return create_job_spec(
+            operation_plan=operation_plan,
+            name=name,
+            description=description,
+            machine_profile=machine_profile,
+            material=material,
+            tool_ids=tool_ids,
+            postprocessor=postprocessor,
+            metadata=metadata,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "schema_version": "0.1",
+            "ok": False,
+            "errors": [f"create_job: unexpected error: {exc}"],
+        }
+
+
+@mcp.tool()
+def validate_job(job: dict) -> dict:
+    """Validate a JSON CNC job spec without generating G-code.
+
+    Checks schema_version, operation_plan presence and validity,
+    machine_type consistency, machine_profile, material, and tool_ids.
+    Runs validate_operation_plan and evaluate_parameter_guardrails internally.
+
+    Args:
+        job: CNCJobSpec dict to validate.
+
+    Returns:
+        {
+          "ok": bool,
+          "errors": list[str],
+          "warnings": list[str],
+          "job": dict | None,
+          "operation_plan_validation": dict | None,
+          "guardrails": dict | None,
+        }
+    """
+    try:
+        return validate_job_spec(job)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "errors": [f"validate_job: unexpected error: {exc}"],
+            "warnings": [],
+            "job": None,
+            "operation_plan_validation": None,
+            "guardrails": None,
+        }
+
+
+@mcp.tool()
+def generate_gcode_from_job(job: dict) -> dict:
+    """Regenerate deterministic G-code from a JSON CNC job spec.
+
+    Any stored ``gcode`` field in the job is ignored.
+    G-code is always produced by the postprocessor pipeline from
+    ``operation_plan``.
+
+    Args:
+        job: CNCJobSpec dict (from create_job, load_job, or JSON file).
+
+    Returns:
+        {
+          "ok": bool,
+          "gcode": str,
+          "job": dict,
+          "validation": dict,
+          "warnings": list[str],
+          "errors": list[str],
+          "postprocessor": str,
+          "safety_report": dict | None,
+        }
+    """
+    try:
+        return job_spec_to_gcode(job)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "gcode": "",
+            "job": job,
+            "validation": {},
+            "warnings": [],
+            "errors": [f"generate_gcode_from_job: unexpected error: {exc}"],
+            "postprocessor": "fanuc",
+            "safety_report": None,
+        }
+
+
+@mcp.tool()
+def save_job(job: dict, path: str) -> dict:
+    """Save a JSON CNC job spec to a local file path.
+
+    The file is written as UTF-8 JSON with 2-space indentation.
+    The path must be accessible to the server process.
+    Do not store secrets (API keys, passwords) in job specs.
+
+    Args:
+        job:  CNCJobSpec dict to save.
+        path: Absolute or relative file path (e.g. "examples/jobs/my_job.json").
+
+    Returns:
+        {"ok": bool, "path": str, "errors": list[str], "warnings": list[str]}
+    """
+    try:
+        return save_job_spec(job, path)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "path": path,
+            "errors": [f"save_job: unexpected error: {exc}"],
+            "warnings": [],
+        }
+
+
+@mcp.tool()
+def load_job(path: str) -> dict:
+    """Load a JSON CNC job spec from a local file path.
+
+    The path must be accessible to the server process.
+    Any stored ``gcode`` field in the loaded job will be flagged with a warning.
+
+    Args:
+        path: Absolute or relative path to a .json job spec file.
+
+    Returns:
+        {
+          "ok": bool,
+          "job": dict | None,
+          "path": str,
+          "errors": list[str],
+          "warnings": list[str],
+        }
+    """
+    try:
+        return load_job_spec(path)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "job": None,
+            "path": path,
+            "errors": [f"load_job: unexpected error: {exc}"],
+            "warnings": [],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Job Run & Report tools (Tools 24–26)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def run_cnc_job(
+    job: dict,
+    save_gcode_path: str | None = None,
+    save_report_path: str | None = None,
+) -> dict:
+    """Run a JSON CNC job spec through validation, postprocessing, and safety analysis.
+
+    Does NOT call an LLM. G-code is always regenerated deterministically
+    from the job's ``operation_plan``. Any stored ``gcode`` field is ignored.
+
+    Args:
+        job:              CNCJobSpec dict (from ``create_job``, ``load_job``, or a JSON file).
+        save_gcode_path:  Optional local path to save the generated G-code (e.g. "outputs/gcode/my_job.nc").
+        save_report_path: Optional local path to save the full run report JSON.
+
+    Returns:
+        {
+          "ok": bool,
+          "run_report": dict,
+          "gcode": str,
+          "warnings": list[str],
+          "errors": list[str],
+          "artifacts": list[dict],
+        }
+    """
+    try:
+        return run_job(
+            job=job,
+            save_gcode_path=save_gcode_path,
+            save_report_path=save_report_path,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "run_report": {},
+            "gcode": "",
+            "warnings": [],
+            "errors": [f"run_cnc_job: unexpected error: {exc}"],
+            "artifacts": [],
+        }
+
+
+@mcp.tool()
+def save_run(run_report: dict, path: str) -> dict:
+    """Save a CNC run report to a local JSON file.
+
+    Args:
+        run_report: Run report dict (from ``run_cnc_job``).
+        path:       Local file path (e.g. "outputs/runs/my_run.json").
+
+    Returns:
+        {"ok": bool, "path": str, "errors": list[str], "warnings": list[str]}
+    """
+    try:
+        return save_run_report(run_report, path)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "path": path,
+            "errors": [f"save_run: unexpected error: {exc}"],
+            "warnings": [],
+        }
+
+
+@mcp.tool()
+def load_run(path: str) -> dict:
+    """Load a CNC run report from a local JSON file.
+
+    Args:
+        path: Local file path to a run report JSON file.
+
+    Returns:
+        {
+          "ok": bool,
+          "run_report": dict | None,
+          "path": str,
+          "errors": list[str],
+          "warnings": list[str],
+        }
+    """
+    try:
+        return load_run_report(path)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "run_report": None,
+            "path": path,
+            "errors": [f"load_run: unexpected error: {exc}"],
+            "warnings": [],
         }
 
 

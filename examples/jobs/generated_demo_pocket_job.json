@@ -1,0 +1,67 @@
+{
+  "schema_version": "0.1",
+  "job_id": "072a6002-add8-4886-b948-2074345aedac",
+  "name": "Demo pocket job",
+  "description": "50x30x5 mm pocket, 6mm endmill, Al6061",
+  "machine_type": "mill",
+  "machine_profile": "generic_mill_mm",
+  "postprocessor": "fanuc",
+  "material": "aluminum_6061",
+  "tool_ids": [
+    "T1"
+  ],
+  "operation_plan": {
+    "machine_type": "mill",
+    "units": "mm",
+    "work_coordinate_system": "G54",
+    "safe_z": 5.0,
+    "tools": [
+      {
+        "id": "T1",
+        "name": "6mm end mill",
+        "diameter": 6.0,
+        "units": "mm",
+        "feedrate": 200.0,
+        "spindle_speed": 4000.0
+      }
+    ],
+    "operations": [
+      {
+        "type": "pocket",
+        "description": "Mill rectangular pocket 50x30mm at origin X0 Y0 to depth 5mm",
+        "tool_id": "T1",
+        "parameters": {
+          "origin_x": 0.0,
+          "origin_y": 0.0,
+          "width": 50.0,
+          "height": 30.0,
+          "target_z": -5.0,
+          "step_down": 1.5,
+          "step_over": 3.0,
+          "tool_diameter": 6.0
+        },
+        "feedrate": 200.0,
+        "spindle_speed": 4000.0
+      }
+    ],
+    "assumptions": [
+      "Material: aluminum_6061",
+      "Pocket toolpath is a simple raster clearing strategy.",
+      "No cutter compensation is applied."
+    ],
+    "warnings": [],
+    "missing_info": [],
+    "material": "aluminum_6061"
+  },
+  "assumptions": [
+    "Material: aluminum_6061",
+    "Pocket toolpath is a simple raster clearing strategy.",
+    "No cutter compensation is applied."
+  ],
+  "warnings": [],
+  "missing_info": [],
+  "metadata": {
+    "author": "demo_job_io.py",
+    "units": "mm"
+  }
+}

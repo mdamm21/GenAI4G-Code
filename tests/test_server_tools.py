@@ -1026,3 +1026,182 @@ def test_evaluate_operation_guardrails_missing_feedrate_not_ok():
     result = evaluate_operation_guardrails(plan, material="aluminum_6061")
     assert result["ok"] is False
     assert result["errors"]
+
+
+# ---------------------------------------------------------------------------
+# Q) create_job (Job Import/Export)
+# ---------------------------------------------------------------------------
+
+_VALID_DRILL_OP = {
+    "machine_type": "drill",
+    "units": "mm",
+    "work_coordinate_system": "G54",
+    "safe_z": 5.0,
+    "tools": [{"id": "T1", "diameter": 5.0}],
+    "operations": [
+        {
+            "type": "drill",
+            "feedrate": 100.0,
+            "spindle_speed": 1200.0,
+            "parameters": {"x": 0.0, "y": 0.0, "z": -5.0},
+        }
+    ],
+    "assumptions": [],
+    "warnings": [],
+    "missing_info": [],
+}
+
+
+def test_create_job_importable():
+    from cnc.server import create_job
+    assert callable(create_job)
+
+
+def test_create_job_returns_dict():
+    from cnc.server import create_job
+    result = create_job(operation_plan=_VALID_DRILL_OP)
+    assert isinstance(result, dict)
+
+
+def test_create_job_schema_version():
+    from cnc.server import create_job
+    result = create_job(operation_plan=_VALID_DRILL_OP)
+    assert result["schema_version"] == "0.1"
+
+
+def test_create_job_has_operation_plan():
+    from cnc.server import create_job
+    result = create_job(operation_plan=_VALID_DRILL_OP)
+    assert "operation_plan" in result
+
+
+def test_create_job_no_gcode_field():
+    from cnc.server import create_job
+    result = create_job(operation_plan=_VALID_DRILL_OP)
+    assert "gcode" not in result
+
+
+# ---------------------------------------------------------------------------
+# R) validate_job
+# ---------------------------------------------------------------------------
+
+
+def test_validate_job_importable():
+    from cnc.server import validate_job
+    assert callable(validate_job)
+
+
+def test_validate_job_valid_ok():
+    from cnc.server import create_job, validate_job
+    job = create_job(operation_plan=_VALID_DRILL_OP, material="aluminum_6061")
+    result = validate_job(job)
+    assert result["ok"] is True
+
+
+def test_validate_job_valid_no_errors():
+    from cnc.server import create_job, validate_job
+    job = create_job(operation_plan=_VALID_DRILL_OP, material="aluminum_6061")
+    result = validate_job(job)
+    assert result["errors"] == []
+
+
+def test_validate_job_missing_op_plan_not_ok():
+    from cnc.server import validate_job
+    job = {"schema_version": "0.1", "postprocessor": "fanuc"}
+    result = validate_job(job)
+    assert result["ok"] is False
+
+
+# ---------------------------------------------------------------------------
+# S) generate_gcode_from_job
+# ---------------------------------------------------------------------------
+
+
+def test_generate_gcode_from_job_importable():
+    from cnc.server import generate_gcode_from_job
+    assert callable(generate_gcode_from_job)
+
+
+def test_generate_gcode_from_job_ok():
+    from cnc.server import create_job, generate_gcode_from_job
+    job = create_job(operation_plan=_VALID_DRILL_OP, material="aluminum_6061")
+    result = generate_gcode_from_job(job)
+    assert result["ok"] is True
+
+
+def test_generate_gcode_from_job_gcode_nonempty():
+    from cnc.server import create_job, generate_gcode_from_job
+    job = create_job(operation_plan=_VALID_DRILL_OP, material="aluminum_6061")
+    result = generate_gcode_from_job(job)
+    assert len(result["gcode"]) > 0
+
+
+def test_generate_gcode_from_job_ignores_stored_gcode():
+    from cnc.server import create_job, generate_gcode_from_job
+    job = create_job(operation_plan=_VALID_DRILL_OP)
+    job["gcode"] = "... [18 rows x 4 passes]"
+    result = generate_gcode_from_job(job)
+    assert "18 rows" not in result["gcode"]
+
+
+def test_generate_gcode_from_job_has_required_keys():
+    from cnc.server import create_job, generate_gcode_from_job
+    job = create_job(operation_plan=_VALID_DRILL_OP)
+    result = generate_gcode_from_job(job)
+    for key in ("ok", "gcode", "job", "validation", "warnings", "errors", "postprocessor"):
+        assert key in result, f"Missing key: {key!r}"
+
+
+# ---------------------------------------------------------------------------
+# T) run_cnc_job / save_run / load_run (Job Runs & Reports)
+# ---------------------------------------------------------------------------
+
+
+def test_run_cnc_job_importable():
+    from cnc.server import run_cnc_job
+    assert callable(run_cnc_job)
+
+
+def test_save_run_importable():
+    from cnc.server import save_run
+    assert callable(save_run)
+
+
+def test_load_run_importable():
+    from cnc.server import load_run
+    assert callable(load_run)
+
+
+def test_run_cnc_job_valid_drill_ok():
+    from cnc.server import create_job, run_cnc_job
+    job = create_job(operation_plan=_VALID_DRILL_OP, material="aluminum_6061")
+    result = run_cnc_job(job)
+    assert result["ok"] is True
+
+
+def test_run_cnc_job_has_run_report():
+    from cnc.server import create_job, run_cnc_job
+    job = create_job(operation_plan=_VALID_DRILL_OP)
+    result = run_cnc_job(job)
+    assert isinstance(result.get("run_report"), dict)
+
+
+def test_run_cnc_job_has_gcode():
+    from cnc.server import create_job, run_cnc_job
+    job = create_job(operation_plan=_VALID_DRILL_OP)
+    result = run_cnc_job(job)
+    assert len(result.get("gcode", "")) > 0
+
+
+def test_run_cnc_job_invalid_job_not_ok():
+    from cnc.server import run_cnc_job
+    result = run_cnc_job({"schema_version": "0.1", "postprocessor": "fanuc"})
+    assert result["ok"] is False
+
+
+def test_run_cnc_job_ignores_stored_gcode():
+    from cnc.server import create_job, run_cnc_job
+    job = create_job(operation_plan=_VALID_DRILL_OP)
+    job["gcode"] = "... [18 rows x 4 passes]"
+    result = run_cnc_job(job)
+    assert "18 rows" not in result.get("gcode", "")
