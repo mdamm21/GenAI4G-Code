@@ -44,6 +44,7 @@ def build_milling_facing_operation_plan(
     material: str | None = None,
     machine_profile: str | None = None,
     postprocessor: str = "fanuc",
+    tool_id: str | None = None,
 ) -> dict:
     """Build a structured OperationPlan dict for a rectangular facing operation.
 
@@ -156,9 +157,10 @@ def build_milling_facing_operation_plan(
         assumptions.append("Material was not specified.")
 
     # --- Tool ---
+    resolved_tool_id = tool_id if tool_id else "T1"
     td = tool_diameter if tool_diameter and tool_diameter > 0 else 0
     tool: dict = {
-        "id": "T1",
+        "id": resolved_tool_id,
         "name": f"{td:g}{units} end mill",
         "diameter": td,
         "units": units,
@@ -180,7 +182,7 @@ def build_milling_facing_operation_plan(
             f"at origin X{float(origin_x):g} Y{float(origin_y):g} "
             f"to depth {abs(target_z):g}{units}"
         ),
-        "tool_id": "T1",
+        "tool_id": resolved_tool_id,
         "parameters": {
             "origin_x": float(origin_x),
             "origin_y": float(origin_y),
@@ -364,6 +366,7 @@ def build_milling_slot_operation_plan(
     material: str | None = None,
     machine_profile: str | None = None,
     postprocessor: str = "fanuc",
+    tool_id: str | None = None,
 ) -> dict:
     """Build a structured OperationPlan dict for a straight slot milling operation.
 
@@ -496,9 +499,10 @@ def build_milling_slot_operation_plan(
     )
 
     # --- Tool ---
+    resolved_tool_id = tool_id if tool_id else "T1"
     td = tool_diameter if tool_diameter and tool_diameter > 0 else 0
     tool: dict = {
-        "id": "T1",
+        "id": resolved_tool_id,
         "name": f"{td:g}{units} end mill",
         "diameter": td,
         "units": units,
@@ -517,7 +521,7 @@ def build_milling_slot_operation_plan(
             f"along {direction_clean}-direction, length={ll:g}{units}, "
             f"depth={abs(target_z):g}{units}"
         ),
-        "tool_id": "T1",
+        "tool_id": resolved_tool_id,
         "parameters": {
             "start_x": float(start_x),
             "start_y": float(start_y),
@@ -699,6 +703,7 @@ def build_milling_pocket_operation_plan(
     material: str | None = None,
     machine_profile: str | None = None,
     postprocessor: str = "fanuc",
+    tool_id: str | None = None,
 ) -> dict:
     """Build a structured OperationPlan dict for a rectangular pocket operation.
 
@@ -851,8 +856,9 @@ def build_milling_pocket_operation_plan(
     assumptions.append("No cutter compensation is applied.")
 
     # --- Tool ---
+    resolved_tool_id = tool_id if tool_id else "T1"
     tool: dict = {
-        "id": "T1",
+        "id": resolved_tool_id,
         "name": f"{td:g}{units} end mill",
         "diameter": td,
         "units": units,
@@ -873,7 +879,7 @@ def build_milling_pocket_operation_plan(
             f"at origin X{float(origin_x):g} Y{float(origin_y):g} "
             f"to depth {abs(target_z):g}{units}"
         ),
-        "tool_id": "T1",
+        "tool_id": resolved_tool_id,
         "parameters": {
             "origin_x": float(origin_x),
             "origin_y": float(origin_y),

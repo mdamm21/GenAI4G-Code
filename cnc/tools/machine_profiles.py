@@ -29,6 +29,7 @@ _PROFILES: dict[str, dict] = {
         "default_feedrate": None,
         "default_spindle_speed": None,
         "default_postprocessor": "fanuc",
+        "default_tool_ids": ["endmill_5mm_flat", "endmill_3mm_flat", "drill_5mm"],
         "notes": [
             "Generic metric milling profile.",
             "Feedrate, spindle speed, tool diameter and cutting parameters must be provided per job.",
@@ -43,6 +44,7 @@ _PROFILES: dict[str, dict] = {
         "default_feedrate": None,
         "default_spindle_speed": None,
         "default_postprocessor": "fanuc",
+        "default_tool_ids": ["endmill_5mm_flat", "endmill_3mm_flat", "drill_5mm"],
         "notes": [
             "Generic inch milling profile.",
             "Feedrate, spindle speed, tool diameter and cutting parameters must be provided per job.",
@@ -57,6 +59,7 @@ _PROFILES: dict[str, dict] = {
         "default_feedrate": None,
         "default_spindle_speed": None,
         "default_postprocessor": "fanuc",
+        "default_tool_ids": ["drill_5mm", "drill_3mm"],
         "notes": [
             "Generic metric drilling profile.",
             "Feedrate and spindle speed must be provided per job.",
@@ -71,6 +74,7 @@ _PROFILES: dict[str, dict] = {
         "default_feedrate": None,
         "default_spindle_speed": None,
         "default_postprocessor": "fanuc",
+        "default_tool_ids": ["drill_5mm", "drill_3mm"],
         "notes": [
             "Generic inch drilling profile.",
             "Feedrate and spindle speed must be provided per job.",
@@ -85,6 +89,7 @@ _PROFILES: dict[str, dict] = {
         "default_feedrate": None,
         "default_spindle_speed": None,
         "default_postprocessor": "grbl",
+        "default_tool_ids": ["drill_5mm", "drill_3mm"],
         "notes": [
             "Generic metric drilling profile for GRBL controllers.",
             "Feedrate and spindle speed must be provided per job.",
@@ -99,6 +104,7 @@ _PROFILES: dict[str, dict] = {
         "default_feedrate": None,
         "default_spindle_speed": None,
         "default_postprocessor": "grbl",
+        "default_tool_ids": ["endmill_5mm_flat", "endmill_3mm_flat", "drill_5mm"],
         "notes": [
             "Generic metric milling profile for GRBL controllers.",
             "Feedrate, spindle speed, tool diameter and cutting parameters must be provided per job.",
@@ -113,6 +119,7 @@ _PROFILES: dict[str, dict] = {
         "default_feedrate": None,
         "default_spindle_speed": None,
         "default_postprocessor": "linuxcnc",
+        "default_tool_ids": ["drill_5mm", "drill_3mm"],
         "notes": [
             "Generic metric drilling profile for LinuxCNC controllers.",
             "Feedrate and spindle speed must be provided per job.",
@@ -127,6 +134,7 @@ _PROFILES: dict[str, dict] = {
         "default_feedrate": None,
         "default_spindle_speed": None,
         "default_postprocessor": "linuxcnc",
+        "default_tool_ids": ["endmill_5mm_flat", "endmill_3mm_flat", "drill_5mm"],
         "notes": [
             "Generic metric milling profile for LinuxCNC controllers.",
             "Feedrate, spindle speed, tool diameter and cutting parameters must be provided per job.",

@@ -27,6 +27,7 @@ def build_drill_operation_plan(
     work_coordinate_system: str = "G54",
     material: str | None = None,
     postprocessor: str = "fanuc",
+    tool_id: str | None = None,
 ) -> dict:
     """Build a structured OperationPlan dict from explicit drill parameters.
 
@@ -84,8 +85,9 @@ def build_drill_operation_plan(
         )
 
     # --- Tool ---
+    resolved_tool_id = tool_id if tool_id else "T1"
     tool: dict = {
-        "id": "T1",
+        "id": resolved_tool_id,
         "name": f"{tool_diameter:g}{units} drill",
         "diameter": tool_diameter,
         "units": units,
@@ -100,7 +102,7 @@ def build_drill_operation_plan(
         "description": (
             f"Drill one hole at X{x:g} Y{y:g} to depth {abs(z_target):g}{units}"
         ),
-        "tool_id": "T1",
+        "tool_id": resolved_tool_id,
         "parameters": {
             "x": float(x),
             "y": float(y),
@@ -262,6 +264,7 @@ def build_drill_pattern_operation_plan(
     material: str | None = None,
     machine_profile: str | None = None,
     postprocessor: str = "fanuc",
+    tool_id: str | None = None,
 ) -> dict:
     """Build a structured OperationPlan dict for a multi-hole drill pattern.
 
@@ -353,9 +356,10 @@ def build_drill_pattern_operation_plan(
         assumptions.append("Material was not specified.")
 
     # --- Build tool ---
+    resolved_tool_id = tool_id if tool_id else "T1"
     td = tool_diameter if tool_diameter and tool_diameter > 0 else 0
     tool: dict = {
-        "id": "T1",
+        "id": resolved_tool_id,
         "name": f"{td:g}{units} drill",
         "diameter": td,
         "units": units,
@@ -395,7 +399,7 @@ def build_drill_pattern_operation_plan(
             "description": (
                 f"Drill hole {idx} at X{hx:g} Y{hy:g} to depth {abs(z_target):g}{units}"
             ),
-            "tool_id": "T1",
+            "tool_id": resolved_tool_id,
             "parameters": {
                 "x": hx,
                 "y": hy,

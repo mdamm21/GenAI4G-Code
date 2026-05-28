@@ -1261,3 +1261,157 @@ def test_run_cnc_job_batch_from_directory_example_jobs():
     result = run_cnc_job_batch_from_directory(directory="examples/jobs")
     assert result["batch_report"]["total_jobs"] >= 2
     assert result["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# V) Tool Library server tools
+# ---------------------------------------------------------------------------
+
+
+def test_list_available_tools_importable():
+    from cnc.server import list_available_tools
+    assert callable(list_available_tools)
+
+
+def test_list_available_tools_returns_list():
+    from cnc.server import list_available_tools
+    result = list_available_tools()
+    assert isinstance(result, list)
+    assert len(result) > 0
+
+
+def test_list_available_tools_contains_drill_5mm():
+    from cnc.server import list_available_tools
+    ids = [t["id"] for t in list_available_tools() if isinstance(t, dict) and "id" in t]
+    assert "drill_5mm" in ids
+
+
+def test_get_tool_info_importable():
+    from cnc.server import get_tool_info
+    assert callable(get_tool_info)
+
+
+def test_get_tool_info_known_tool():
+    from cnc.server import get_tool_info
+    result = get_tool_info("drill_5mm")
+    assert result["ok"] is True
+    assert result["tool"]["id"] == "drill_5mm"
+
+
+def test_get_tool_info_unknown_tool():
+    from cnc.server import get_tool_info
+    result = get_tool_info("nonexistent_xyz")
+    assert result["ok"] is False
+    assert result["tool"] is None
+    assert len(result["errors"]) > 0
+
+
+def test_search_tools_importable():
+    from cnc.server import search_tools
+    assert callable(search_tools)
+
+
+def test_search_tools_no_filters():
+    from cnc.server import search_tools
+    result = search_tools()
+    assert result["ok"] is True
+    assert isinstance(result["tools"], list)
+    assert result["count"] > 0
+
+
+def test_search_tools_machine_type_drill():
+    from cnc.server import search_tools
+    result = search_tools(machine_type="drill")
+    assert result["ok"] is True
+    assert result["count"] > 0
+    for t in result["tools"]:
+        assert "drill" in t["supported_machine_types"]
+
+
+def test_search_tools_machine_type_mill():
+    from cnc.server import search_tools
+    result = search_tools(machine_type="mill")
+    assert result["ok"] is True
+    assert result["count"] > 0
+
+
+def test_search_tools_operation_type_pocket():
+    from cnc.server import search_tools
+    result = search_tools(operation_type="pocket")
+    assert result["ok"] is True
+    for t in result["tools"]:
+        assert "pocket" in t["supported_operations"]
+
+
+def test_search_tools_unknown_machine_empty():
+    from cnc.server import search_tools
+    result = search_tools(machine_type="lathe")
+    assert result["ok"] is True
+    assert result["count"] == 0
+
+
+def test_resolve_tool_importable():
+    from cnc.server import resolve_tool
+    assert callable(resolve_tool)
+
+
+def test_resolve_tool_known():
+    from cnc.server import resolve_tool
+    result = resolve_tool("drill_5mm")
+    assert result["ok"] is True
+    assert result["tool"] is not None
+
+
+def test_resolve_tool_unknown_warns():
+    from cnc.server import resolve_tool
+    result = resolve_tool("T1")
+    assert result["ok"] is True  # unknown → warning not error
+    assert result["tool"] is None
+    assert len(result["warnings"]) > 0
+
+
+def test_resolve_tool_wrong_machine_warns():
+    from cnc.server import resolve_tool
+    result = resolve_tool("endmill_5mm_flat", machine_type="drill")
+    assert result["ok"] is True
+    assert len(result["warnings"]) > 0
+
+
+def test_resolve_plan_tools_importable():
+    from cnc.server import resolve_plan_tools
+    assert callable(resolve_plan_tools)
+
+
+def test_resolve_plan_tools_known_tool():
+    from cnc.server import resolve_plan_tools
+    plan = {
+        "machine_type": "drill",
+        "units": "mm",
+        "safe_z": 5.0,
+        "tools": [{"id": "drill_5mm", "diameter": 5.0}],
+        "operations": [
+            {"type": "drill", "tool_id": "drill_5mm",
+             "parameters": {"x": 0, "y": 0, "z": -5}}
+        ],
+    }
+    result = resolve_plan_tools(plan)
+    assert result["ok"] is True
+    assert len(result["resolved"]) == 1
+
+
+def test_resolve_plan_tools_unknown_tool_warns():
+    from cnc.server import resolve_plan_tools
+    plan = {
+        "machine_type": "drill",
+        "units": "mm",
+        "safe_z": 5.0,
+        "tools": [{"id": "T1", "diameter": 5.0}],
+        "operations": [
+            {"type": "drill", "tool_id": "T1",
+             "parameters": {"x": 0, "y": 0, "z": -5}}
+        ],
+    }
+    result = resolve_plan_tools(plan)
+    assert result["ok"] is True  # unknown → warning
+    assert len(result["warnings"]) > 0
+

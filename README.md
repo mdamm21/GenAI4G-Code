@@ -814,6 +814,79 @@ python -m scripts.demo_job_run_report
 
 ---
 
+## Tool Library and Tool Resolution
+
+The built-in Tool Library provides dimensional and capability metadata for common CNC tools.
+No cutting data is stored — feedrate, spindle speed, and depth of cut are always job-specific.
+
+### Built-in tools
+
+| ID | Name | Type | Diameter | Machines | Operations |
+|---|---|---|---|---|---|
+| `drill_5mm` | 5mm HSS Drill Bit | drill | 5.0mm | drill, mill | drill, peck_drill, bore, ream |
+| `drill_3mm` | 3mm HSS Drill Bit | drill | 3.0mm | drill, mill | drill, peck_drill, bore, ream |
+| `endmill_5mm_flat` | 5mm 4-Flute Flat End Mill | end_mill | 5.0mm | mill | facing, slot, pocket, contour, profile |
+| `endmill_3mm_flat` | 3mm 4-Flute Flat End Mill | end_mill | 3.0mm | mill | facing, slot, pocket, contour, profile |
+
+### Key behaviours
+
+- **Unknown `tool_id`s produce warnings, not errors.** Job specs often use machine-internal IDs like `"T1"` — these are passed through with a warning.
+- **Known tools used for unsupported operations produce errors** during `validate_operation_plan`.
+- **All build functions accept an optional `tool_id` parameter** — when supplied, the tool is registered with that ID in the plan instead of the default `"T1"`.
+- **Machine profiles include `default_tool_ids`** — each profile lists the tools that are typically installed.
+
+### Python API
+
+```python
+from cnc.tools.tool_library import list_tools, get_tool, find_tools
+from cnc.tools.tool_library import resolve_tool_id, resolve_operation_plan_tools
+
+# List all
+tools = list_tools()
+
+# Get by ID
+drill = get_tool("drill_5mm")
+
+# Find by capability
+pocket_tools = find_tools(machine_type="mill", operation_type="pocket")
+
+# Validate a tool_id (unknown → warning, not error)
+result = resolve_tool_id("drill_5mm", machine_type="drill", operation_type="drill")
+
+# Validate all tool refs in a plan
+resolution = resolve_operation_plan_tools(operation_plan)
+```
+
+### Build with a library tool_id
+
+```python
+from cnc.tools.drill_tools import build_drill_operation_plan
+
+plan = build_drill_operation_plan(
+    x=10, y=20, depth=5, tool_diameter=5.0,
+    safe_z=5.0, feedrate=150,
+    tool_id="drill_5mm",  # ← registers the tool in the plan
+)
+```
+
+### New MCP tools (Tools 32–36)
+
+| Tool | Description |
+|---|---|
+| `list_available_tools` | List all built-in tools |
+| `get_tool_info` | Get full metadata for one tool by ID |
+| `search_tools` | Filter tools by machine type, operation, tool type, or units |
+| `resolve_tool` | Validate a single tool_id against the registry |
+| `resolve_plan_tools` | Validate all tool references in an OperationPlan |
+
+### Demo (no API key required)
+
+```bash
+python scripts/demo_tool_resolution.py
+```
+
+---
+
 ## Run tests
 
 ```bash

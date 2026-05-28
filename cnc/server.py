@@ -68,6 +68,13 @@ from cnc.tools.batch_jobs import (
     save_batch_report,
     load_batch_report,
 )
+from cnc.tools.tool_library import (
+    list_tools as _list_tools,
+    get_tool as _get_tool,
+    find_tools as _find_tools,
+    resolve_tool_id as _resolve_tool_id,
+    resolve_operation_plan_tools as _resolve_operation_plan_tools,
+)
 
 mcp = FastMCP("genai4g-cnc")
 
@@ -1788,6 +1795,177 @@ def load_batch(path: str) -> dict:
             "path": path,
             "errors": [f"load_batch: unexpected error: {exc}"],
             "warnings": [],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tool 32: list_available_tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_available_tools() -> list[dict]:
+    """List all built-in CNC tools in the Tool Library.
+
+    Returns dimensional and capability metadata — no cutting data.
+    Cutting parameters (feedrate, spindle speed) must be supplied per job.
+
+    Returns:
+        List of tool dicts, each with id, name, tool_type, diameter, units,
+        flute_count, material, supported_machine_types, supported_operations, notes.
+    """
+    try:
+        return _list_tools()
+    except Exception as exc:  # noqa: BLE001
+        return [{"ok": False, "errors": [f"list_available_tools: unexpected error: {exc}"]}]
+
+
+# ---------------------------------------------------------------------------
+# Tool 33: get_tool_info
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_tool_info(tool_id: str) -> dict:
+    """Return full metadata for a single built-in tool.
+
+    Args:
+        tool_id: Tool ID, e.g. "drill_5mm", "endmill_5mm_flat".
+
+    Returns:
+        Tool dict if found, or {"ok": False, "errors": [...]} if not found.
+    """
+    try:
+        tool = _get_tool(tool_id)
+        if tool is None:
+            return {
+                "ok": False,
+                "tool": None,
+                "errors": [f"Tool '{tool_id}' not found in the built-in library."],
+                "warnings": [],
+            }
+        return {"ok": True, "tool": tool, "errors": [], "warnings": []}
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "tool": None,
+            "errors": [f"get_tool_info: unexpected error: {exc}"],
+            "warnings": [],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tool 34: search_tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def search_tools(
+    machine_type: str | None = None,
+    operation_type: str | None = None,
+    tool_type: str | None = None,
+    units: str | None = None,
+) -> dict:
+    """Search built-in tools by machine type, operation type, tool type, or units.
+
+    All filters are optional and AND-combined. An empty call returns all tools.
+
+    Args:
+        machine_type:   Filter to tools that support this machine, e.g. "drill", "mill".
+        operation_type: Filter to tools that support this operation, e.g. "pocket", "drill".
+        tool_type:      Filter by tool type: "drill", "end_mill", "engraver", "laser".
+        units:          Filter by unit system: "mm" or "inch".
+
+    Returns:
+        {"ok": bool, "tools": list[dict], "count": int, "errors": list, "warnings": list}
+    """
+    try:
+        tools = _find_tools(
+            machine_type=machine_type,
+            operation_type=operation_type,
+            tool_type=tool_type,
+            units=units,
+        )
+        return {"ok": True, "tools": tools, "count": len(tools), "errors": [], "warnings": []}
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "tools": [],
+            "count": 0,
+            "errors": [f"search_tools: unexpected error: {exc}"],
+            "warnings": [],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tool 35: resolve_tool
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def resolve_tool(
+    tool_id: str,
+    machine_type: str | None = None,
+    operation_type: str | None = None,
+    units: str | None = None,
+) -> dict:
+    """Validate a tool_id against the built-in library and check compatibility.
+
+    Unknown tool_ids produce a warning (not an error) since plans often use
+    machine-internal IDs like "T1" that are not in the library.
+
+    Args:
+        tool_id:        Tool ID to resolve.
+        machine_type:   If provided, warn if tool does not support this machine.
+        operation_type: If provided, warn if tool does not support this operation.
+        units:          If provided, warn if tool units do not match.
+
+    Returns:
+        {"ok": bool, "tool": dict | None, "warnings": list, "errors": list}
+    """
+    try:
+        return _resolve_tool_id(
+            tool_id=tool_id,
+            machine_type=machine_type,
+            operation_type=operation_type,
+            units=units,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "tool": None,
+            "errors": [f"resolve_tool: unexpected error: {exc}"],
+            "warnings": [],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tool 36: resolve_plan_tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def resolve_plan_tools(operation_plan: dict) -> dict:
+    """Validate all tool references in an OperationPlan against the built-in library.
+
+    Checks both the top-level tools list and each operation's tool_id field.
+    Unknown tool_ids produce warnings; known tools used for unsupported operations
+    produce warnings.
+
+    Args:
+        operation_plan: OperationPlan dict as produced by the build_* or generate_* tools.
+
+    Returns:
+        {"ok": bool, "warnings": list, "errors": list, "resolved": list[dict]}
+    """
+    try:
+        return _resolve_operation_plan_tools(operation_plan)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "warnings": [],
+            "errors": [f"resolve_plan_tools: unexpected error: {exc}"],
+            "resolved": [],
         }
 
 

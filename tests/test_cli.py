@@ -50,16 +50,51 @@ def test_list_profiles_contains_generic_drill_mm(capsys):
 
 def test_list_tools_does_not_crash(capsys):
     rc = main(["list-tools"])
-    # Either 0 (library present) or 1 (library absent) — must not raise
-    assert rc in (0, 1)
+    assert rc == 0  # Tool Library is now available
 
 
 def test_list_tools_output_is_json(capsys):
     main(["list-tools"])
     captured = capsys.readouterr()
-    # Must produce valid JSON regardless of whether library is present
     data = json.loads(captured.out)
     assert isinstance(data, (list, dict))
+
+
+def test_list_tools_exit_zero(capsys):
+    rc = main(["list-tools"])
+    assert rc == 0
+
+
+def test_list_tools_returns_list(capsys):
+    main(["list-tools"])
+    data = _parse_stdout(capsys)
+    assert isinstance(data, list)
+    assert len(data) > 0
+
+
+def test_list_tools_contains_drill_5mm(capsys):
+    main(["list-tools"])
+    data = _parse_stdout(capsys)
+    ids = [t["id"] for t in data]
+    assert "drill_5mm" in ids
+
+
+def test_list_tools_filter_machine_type(capsys):
+    rc = main(["list-tools", "--machine-type", "drill"])
+    assert rc == 0
+    data = _parse_stdout(capsys)
+    assert isinstance(data, list)
+    for t in data:
+        assert "drill" in t["supported_machine_types"]
+
+
+def test_list_tools_filter_tool_type(capsys):
+    rc = main(["list-tools", "--tool-type", "end_mill"])
+    assert rc == 0
+    data = _parse_stdout(capsys)
+    assert isinstance(data, list)
+    for t in data:
+        assert t["tool_type"] == "end_mill"
 
 
 # ---------------------------------------------------------------------------

@@ -787,6 +787,105 @@ Files that cannot be loaded appear in the batch results with `status: "failed"`.
 
 ---
 
+## Tool Library — MCP tool examples
+
+### `list_available_tools` — list all built-in tools
+
+```json
+{
+  "tool": "list_available_tools",
+  "arguments": {}
+}
+```
+
+Returns a list of tool dicts. Each entry includes `id`, `name`, `tool_type`, `diameter`, `units`,
+`flute_count`, `material`, `supported_machine_types`, `supported_operations`, and `notes`.
+
+### `get_tool_info` — get metadata for a single tool
+
+```json
+{
+  "tool": "get_tool_info",
+  "arguments": {
+    "tool_id": "drill_5mm"
+  }
+}
+```
+
+Returns `{"ok": true, "tool": {...}, "errors": [], "warnings": []}` or
+`{"ok": false, "tool": null, "errors": ["Tool 'x' not found..."]}` if not recognised.
+
+### `search_tools` — filter tools by capability
+
+```json
+{
+  "tool": "search_tools",
+  "arguments": {
+    "machine_type": "mill",
+    "operation_type": "pocket"
+  }
+}
+```
+
+All filter arguments are optional and AND-combined. Available filters:
+- `machine_type` — e.g. `"drill"`, `"mill"`
+- `operation_type` — e.g. `"drill"`, `"facing"`, `"pocket"`, `"slot"`
+- `tool_type` — `"drill"`, `"end_mill"`, `"engraver"`, `"laser"`
+- `units` — `"mm"` or `"inch"`
+
+Returns `{"ok": true, "tools": [...], "count": N, "errors": [], "warnings": []}`.
+
+### `resolve_tool` — validate a tool_id against the registry
+
+```json
+{
+  "tool": "resolve_tool",
+  "arguments": {
+    "tool_id": "drill_5mm",
+    "machine_type": "drill",
+    "operation_type": "drill"
+  }
+}
+```
+
+Returns `{"ok": true, "tool": {...}, "warnings": [], "errors": []}`.
+Unknown tool_ids (e.g. `"T1"`) always return `ok: true` with a warning — they are never errors.
+
+### `resolve_plan_tools` — validate all tool references in an OperationPlan
+
+```json
+{
+  "tool": "resolve_plan_tools",
+  "arguments": {
+    "operation_plan": {
+      "machine_type": "drill",
+      "units": "mm",
+      "safe_z": 5.0,
+      "tools": [{"id": "drill_5mm", "diameter": 5.0}],
+      "operations": [
+        {"type": "drill", "tool_id": "drill_5mm",
+         "feedrate": 150, "parameters": {"x": 10, "y": 20, "z": -5}}
+      ]
+    }
+  }
+}
+```
+
+Returns `{"ok": bool, "warnings": [...], "errors": [...], "resolved": [...]}`.
+`resolved` contains full library metadata for each known tool found in the plan.
+
+---
+
+## Tool Library — important notes
+
+- The Tool Library provides **dimensional and capability metadata only** — no cutting data.
+- Cutting parameters (feedrate, spindle speed, depth of cut) are always **job-specific** and must be supplied explicitly.
+- **Unknown `tool_id`s produce warnings, not errors.** Plans using machine-internal IDs like `"T1"` are valid and common.
+- **Known tools used for unsupported operations produce errors** during `validate_operation_plan`.
+- Machine profiles (`list_machine_profiles`) include a `default_tool_ids` list indicating which tools are commonly available on that machine.
+
+---
+
 ## Safety note
 
 The `generate_gcode` tool uses an LLM agent internally. All generated G-code:

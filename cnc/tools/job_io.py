@@ -27,6 +27,7 @@ from cnc.tools.validation_tools import validate_operation_plan
 # Tool library may not exist in all installations — import defensively.
 try:
     from cnc.tools.tool_library import get_tool as _get_tool  # type: ignore
+    from cnc.tools.tool_library import resolve_operation_plan_tools as _resolve_op_tools  # type: ignore
     _HAS_TOOL_LIBRARY = True
 except ImportError:
     _HAS_TOOL_LIBRARY = False
@@ -194,6 +195,17 @@ def validate_job_spec(job: dict) -> dict:
             tool = _get_tool(tid)
             if tool is None:
                 warnings.append(f"Unknown tool_id: '{tid}'.")
+
+        # Resolve tool references inside the operation_plan.
+        if op is not None:
+            try:
+                op_tool_resolution = _resolve_op_tools(op)
+                for w in op_tool_resolution.get("warnings", []):
+                    warnings.append(f"tool_resolution: {w}")
+                for e in op_tool_resolution.get("errors", []):
+                    errors.append(f"tool_resolution: {e}")
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"tool resolution raised exception: {exc}")
 
     # --- validate operation_plan ---
     if op is not None:

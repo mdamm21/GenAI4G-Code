@@ -1,5 +1,12 @@
 """Validation tools — check operation plans before postprocessing."""
 
+# Tool library is optional — import defensively.
+try:
+    from cnc.tools.tool_library import get_tool as _get_library_tool  # type: ignore
+    _HAS_TOOL_LIBRARY = True
+except ImportError:
+    _HAS_TOOL_LIBRARY = False
+
 # Drill operation types that require complete x/y/z/feedrate parameters.
 _DRILL_OP_TYPES = {"drill", "drilling", "peck_drill", "bore", "ream"}
 
@@ -366,6 +373,42 @@ def validate_operation_plan(operation_plan: dict) -> dict:
                     f"{op_label}: no spindle_speed/spindle_rpm specified. "
                     "Spindle start (M03) will be skipped."
                 )
+
+    # --- Tool library checks (when library is available) ---
+    if _HAS_TOOL_LIBRARY and operations:
+        for i, op in enumerate(operations):
+            if not isinstance(op, dict):
+                continue
+            op_type = op.get("type", "")
+            op_tool_id = op.get("tool_id") or op.get("tool_number")
+            if not op_tool_id:
+                continue
+            op_tool_id = str(op_tool_id)
+            lib_tool = _get_library_tool(op_tool_id)
+            if lib_tool is None:
+                # Unknown tool_id — warning only, not an error
+                # (many plans use machine-internal IDs like "T1")
+                warnings.append(
+                    f"Operation {i} references tool_id='{op_tool_id}' "
+                    "which is not in the built-in tool library."
+                )
+            else:
+                # Tool is known — check operation type support
+                supported_ops = lib_tool.get("supported_operations", [])
+                if op_type and supported_ops and op_type not in supported_ops:
+                    errors.append(
+                        f"Operation {i} (type='{op_type}') uses known tool "
+                        f"'{op_tool_id}' which does not support operation type "
+                        f"'{op_type}'. Supported: {supported_ops}."
+                    )
+                # Check machine type support
+                if machine_type:
+                    supported_machines = lib_tool.get("supported_machine_types", [])
+                    if supported_machines and machine_type not in supported_machines:
+                        warnings.append(
+                            f"Operation {i}: tool '{op_tool_id}' supports machine "
+                            f"types {supported_machines} but machine_type='{machine_type}'."
+                        )
 
     # --- Material check (informational warning — never an error) ---
     if not operation_plan.get("material"):
