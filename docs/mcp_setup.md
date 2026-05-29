@@ -115,6 +115,38 @@ Add the following to your Claude Desktop MCP configuration file.
 
 ---
 
+## Structured error responses
+
+All MCP tools return structured responses. Clients should check `ok`, `errors`, and `warnings`:
+
+```json
+{
+  "ok": false,
+  "errors": ["Unknown tool_id: 'drill_99mm'."],
+  "warnings": []
+}
+```
+
+For G-code tools, additionally check `validation` and `safety_report`:
+
+```json
+{
+  "ok": true,
+  "gcode": "...",
+  "validation": { "ok": true, "errors": [], "warnings": [] },
+  "safety_report": { "risk_level": "low", "findings": [] },
+  "errors": [],
+  "warnings": []
+}
+```
+
+**Key rules:**
+- Errors are always in `errors` (list), never in a singular `"error"` key.
+- `ok: true` means the pipeline ran successfully — not that the G-code is safe to run on a real machine.
+- Always review `validation` and `safety_report` before using G-code output.
+
+---
+
 ## Environment variables
 
 | Variable | Purpose | Default |

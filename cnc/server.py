@@ -84,6 +84,37 @@ mcp = FastMCP("genai4g-cnc")
 # ---------------------------------------------------------------------------
 
 
+def _tool_error(exc: Exception, context: str) -> dict:
+    """Convert an unexpected exception to a safe envelope (no stack trace).
+
+    Used by server-level except blocks for lookup/meta tools that return
+    the standard envelope (ok, data, warnings, errors, metadata).
+    """
+    from cnc.tools.response_contracts import normalize_exception_response
+    return normalize_exception_response(exc, context=context)
+
+
+def _wrap_legacy_result(result: dict, data_key: str | None = None) -> dict:
+    """Optionally promote a legacy flat dict into the standard envelope.
+
+    If *data_key* is given, the value at ``result[data_key]`` becomes
+    ``data``; otherwise the whole *result* dict is placed in ``data``.
+
+    Existing CNC G-code tools that return domain-specific top-level keys
+    (gcode, operation_plan, validation …) should NOT be wrapped — calling
+    this on them would break existing tests.  Use it only for new meta/
+    lookup tools whose callers explicitly expect the standard envelope.
+    """
+    data = result.get(data_key) if data_key else result
+    return {
+        "ok": result.get("ok", True),
+        "data": data,
+        "warnings": result.get("warnings", []),
+        "errors": result.get("errors", []),
+        "metadata": result.get("metadata", {}),
+    }
+
+
 def _error_response(
     errors: list[str],
     warnings: list[str] | None = None,
@@ -293,11 +324,13 @@ def generate_drill_gcode(
     material: str | None = None,
     postprocessor: str = "fanuc",
 ) -> dict:
-    """Generate conservative Fanuc-style drilling G-code from explicit drilling parameters.
+    """Generate conservative drilling G-code from explicit parameters.
 
-    This deterministic tool does NOT use an LLM. It builds a structured
-    OperationPlan from the supplied parameters, validates the plan, runs the
-    named postprocessor to produce G-code, and validates the resulting G-code.
+    Deterministic; does not use an LLM. Builds a structured OperationPlan
+    from the supplied parameters, validates the plan, runs the named
+    postprocessor to produce G-code, and validates the resulting G-code.
+
+    Output must be reviewed and simulated before real machine use.
 
     Args:
         x: Hole X position (in units).
@@ -383,24 +416,41 @@ def list_profiles() -> list[dict]:
 def get_profile(name: str) -> dict:
     """Get a built-in machine profile by name.
 
+    Deterministic; does not use an LLM.
+
     Args:
         name: Profile name, e.g. "generic_drill_mm" or "generic_drill_inch".
+              Use list_profiles() to see all available names.
 
     Returns:
-        Dict with keys: ok, profile (or None if not found), error (on failure).
+        {"ok": True, "profile": dict, "errors": [], "warnings": []} on success.
+        {"ok": False, "profile": None, "errors": [str], "warnings": []} if not found.
     """
-    profile = get_machine_profile(name)
-    if profile is None:
+    try:
+        profile = get_machine_profile(name)
+        if profile is None:
+            return {
+                "ok": False,
+                "profile": None,
+                "errors": [
+                    f"Unknown machine profile: {name!r}. "
+                    "Use list_profiles() to see available profiles."
+                ],
+                "warnings": [],
+            }
+        return {
+            "ok": True,
+            "profile": profile,
+            "errors": [],
+            "warnings": [],
+        }
+    except Exception as exc:  # noqa: BLE001
         return {
             "ok": False,
-            "error": f"Unknown machine profile: {name!r}. "
-                     "Use list_profiles() to see available profiles.",
             "profile": None,
+            "errors": [f"get_profile: unexpected error: {exc}"],
+            "warnings": [],
         }
-    return {
-        "ok": True,
-        "profile": profile,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -807,14 +857,14 @@ def analyze_gcode_safety_report(
     max_depth: float | None = None,
     allowed_commands: list[str] | None = None,
 ) -> dict:
-    """Run the G-code Safety Analyzer and return a structured safety report.
+    """Analyze G-code for obvious safety and completeness issues.
 
-    This deterministic tool does NOT use an LLM. It performs static analysis
-    of a G-code program and returns a structured report with risk level,
-    individual findings (with severity and line numbers), and a program summary.
+    Deterministic; does not use an LLM. Performs static analysis and returns
+    a structured report with risk level, individual findings (with severity
+    and line numbers), and a program summary.
 
-    It does NOT simulate machine motion and does NOT replace expert review.
-    All results are advisory only.
+    This is not formal verification and does not replace simulation or expert
+    review. All results are advisory only.
 
     Args:
         gcode:             G-code program text to analyze.
@@ -1070,18 +1120,18 @@ async def plan_operation(
 
 @mcp.tool()
 async def generate_gcode(prompt: str, machine_type: str | None = None) -> dict:
-    """Generate G-code from a natural language manufacturing description.
+    """Plan from natural language using the agent, then regenerate G-code deterministically.
 
-    Full pipeline:
-    1. CNC DeepAgent parses the prompt and plans a structured OperationPlan.
+    Pipeline:
+    1. CNC DeepAgent parses the prompt and produces a structured OperationPlan.
     2. OperationPlan is extracted and normalized from the agent result.
     3. If ``missing_info`` is non-empty, no G-code is produced.
     4. OperationPlan is validated.
-    5. Postprocessor generates deterministic G-code.
-    6. Safety Analyzer validates the G-code.
+    5. Postprocessor generates deterministic G-code from the validated plan.
+    6. Safety Analyzer runs on the final G-code.
 
-    Freeform agent text is NEVER treated as final G-code.
-    Only structured OperationPlans from the validation pipeline are accepted.
+    Agent-provided G-code text is always discarded — only the structured
+    OperationPlan is trusted. Requires ANTHROPIC_API_KEY.
 
     Args:
         prompt: Natural language manufacturing description.
@@ -1254,27 +1304,41 @@ def list_available_materials() -> list[dict]:
 def get_material_info(material_id: str) -> dict:
     """Get one built-in material library entry by ID.
 
+    Deterministic; does not use an LLM.
+
     Args:
         material_id: Library ID, e.g. "aluminum_6061", "mild_steel".
+                     Use list_available_materials() to see all available IDs.
 
     Returns:
-        {"ok": True, "material": dict} on success.
-        {"ok": False, "error": str, "material": None} if not found.
+        {"ok": True, "material": dict, "errors": [], "warnings": []} on success.
+        {"ok": False, "material": None, "errors": [str], "warnings": []} if not found.
     """
-    material = get_material(material_id)
-    if material is None:
+    try:
+        material = get_material(material_id)
+        if material is None:
+            return {
+                "ok": False,
+                "material": None,
+                "errors": [
+                    f"Unknown material_id: {material_id!r}. "
+                    "Use list_available_materials() to see available materials."
+                ],
+                "warnings": [],
+            }
+        return {
+            "ok": True,
+            "material": material,
+            "errors": [],
+            "warnings": [],
+        }
+    except Exception as exc:  # noqa: BLE001
         return {
             "ok": False,
-            "error": (
-                f"Unknown material_id: {material_id!r}. "
-                "Use list_available_materials() to see available materials."
-            ),
             "material": None,
+            "errors": [f"get_material_info: unexpected error: {exc}"],
+            "warnings": [],
         }
-    return {
-        "ok": True,
-        "material": material,
-    }
 
 
 # ---------------------------------------------------------------------------

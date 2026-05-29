@@ -1415,3 +1415,104 @@ def test_resolve_plan_tools_unknown_tool_warns():
     assert result["ok"] is True  # unknown → warning
     assert len(result["warnings"]) > 0
 
+
+# ---------------------------------------------------------------------------
+# W) Response contract consistency — Schritt 23
+# ---------------------------------------------------------------------------
+
+
+def test_get_tool_info_unknown_has_errors_list():
+    """get_tool_info unknown → ok False, errors is a list."""
+    from cnc.server import get_tool_info
+    result = get_tool_info("nonexistent_xyz")
+    assert result["ok"] is False
+    assert isinstance(result["errors"], list)
+    assert len(result["errors"]) > 0
+
+
+def test_get_tool_info_unknown_tool_is_none():
+    from cnc.server import get_tool_info
+    result = get_tool_info("nonexistent_xyz")
+    assert result["tool"] is None
+
+
+def test_get_profile_unknown_has_errors_list():
+    """get_profile unknown → ok False, errors is a list."""
+    from cnc.server import get_profile
+    result = get_profile("no_such_profile")
+    assert result["ok"] is False
+    assert isinstance(result["errors"], list)
+    assert len(result["errors"]) > 0
+
+
+def test_get_profile_unknown_no_singular_error_key():
+    """get_profile should use 'errors' (list), not 'error' (string)."""
+    from cnc.server import get_profile
+    result = get_profile("no_such_profile")
+    # 'errors' must be present; 'error' (singular) is the old pattern we're removing
+    assert "errors" in result
+
+
+def test_get_material_info_unknown_has_errors_list():
+    """get_material_info unknown → ok False, errors is a list."""
+    from cnc.server import get_material_info
+    result = get_material_info("unobtainium")
+    assert result["ok"] is False
+    assert isinstance(result["errors"], list)
+    assert len(result["errors"]) > 0
+
+
+def test_get_material_info_unknown_no_singular_error_key():
+    """get_material_info should use 'errors' (list), not 'error' (string)."""
+    from cnc.server import get_material_info
+    result = get_material_info("unobtainium")
+    assert "errors" in result
+
+
+def test_analyze_gcode_safety_report_has_ok():
+    from cnc.server import analyze_gcode_safety_report
+    gcode = "G21\nG90\nG54\nG0 Z5\nS1200 M03\nG01 Z-5 F100\nG0 Z5\nM05\nM30"
+    result = analyze_gcode_safety_report(gcode, machine_type="drill")
+    assert "ok" in result
+
+
+def test_analyze_gcode_safety_report_has_errors_list():
+    from cnc.server import analyze_gcode_safety_report
+    gcode = "G21\nG90\nG54\nG0 Z5\nS1200 M03\nG01 Z-5 F100\nG0 Z5\nM05\nM30"
+    result = analyze_gcode_safety_report(gcode, machine_type="drill")
+    assert isinstance(result.get("errors", []), list)
+
+
+def test_analyze_gcode_safety_report_has_warnings_list():
+    from cnc.server import analyze_gcode_safety_report
+    gcode = "G21\nG90\nG54\nG0 Z5\nS1200 M03\nG01 Z-5 F100\nG0 Z5\nM05\nM30"
+    result = analyze_gcode_safety_report(gcode, machine_type="drill")
+    assert isinstance(result.get("warnings", []), list)
+
+
+def test_generate_drill_gcode_errors_is_list():
+    """generate_drill_gcode success → errors field must be a list."""
+    from cnc.server import generate_drill_gcode
+    result = generate_drill_gcode(
+        x=0, y=0, depth=5, tool_diameter=5,
+        safe_z=5, feedrate=100, spindle_speed=1200,
+    )
+    assert result["ok"] is True
+    assert isinstance(result.get("errors", []), list)
+
+
+def test_get_profile_known_has_errors_list():
+    """get_profile success → errors field must be a list."""
+    from cnc.server import get_profile
+    result = get_profile("generic_drill_mm")
+    assert result["ok"] is True
+    assert isinstance(result.get("errors", []), list)
+
+
+def test_get_material_info_known_has_errors_list():
+    """get_material_info success → errors field must be a list."""
+    from cnc.server import get_material_info
+    result = get_material_info("aluminum_6061")
+    assert result["ok"] is True
+    assert isinstance(result.get("errors", []), list)
+

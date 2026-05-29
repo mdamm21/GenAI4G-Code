@@ -962,6 +962,48 @@ GenAI4G-Code/
 
 ---
 
+## MCP Response Contracts
+
+All MCP tools return structured JSON responses. Complex tools use a standard envelope:
+
+```json
+{
+  "ok": true,
+  "data": {},
+  "warnings": [],
+  "errors": [],
+  "metadata": {}
+}
+```
+
+G-code generation tools additionally include domain-specific top-level fields:
+
+```json
+{
+  "ok": true,
+  "gcode": "...",
+  "operation_plan": {},
+  "validation": {},
+  "safety_report": {},
+  "warnings": [],
+  "errors": []
+}
+```
+
+**Rules:**
+- Errors are always in `errors` (list of strings). Never in a singular `error` key.
+- Warnings are always in `warnings` (list of strings).
+- `ok: true` means the pipeline succeeded technically — it does **not** mean the G-code is safe to run on a real machine.
+- Lookup/meta tools (`get_profile`, `get_tool_info`, `get_material_info`) always include `errors` and `warnings` lists even on success.
+
+**Safety note for G-code tools:**
+- Always check `validation` and `safety_report` in addition to `ok`.
+- `ok: true` with non-empty `warnings` means the G-code was generated but review is recommended.
+
+The response contract helpers live in `cnc/tools/response_contracts.py`.
+
+---
+
 ## Safety note
 
 > **Generated G-code is for review and simulation only.**
