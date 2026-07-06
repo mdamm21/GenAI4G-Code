@@ -1,6 +1,6 @@
-# MCP Developer Setup
+# Developer Setup
 
-This document explains how to connect an MCP client to the GENAI4G-CODE server.
+This document explains how to connect a tool client to the GENAI4G-CODE server.
 
 ---
 
@@ -10,11 +10,11 @@ This document explains how to connect an MCP client to the GENAI4G-CODE server.
 python -m cnc.server
 ```
 
-The server uses stdio transport (reads from stdin, writes to stdout). It will wait for MCP messages — this is expected behavior.
+The server uses stdio transport (reads from stdin, writes to stdout). It will wait for tool messages — this is expected behavior.
 
 ---
 
-## CLI (independent of MCP)
+## CLI (independent of MCP server)
 
 The `cnc.cli` module provides a command-line interface that works without a running MCP server
 or API key. It is useful for testing jobs, validating G-code, and listing library entries
@@ -30,13 +30,13 @@ python -m cnc.cli list-materials --category aluminum
 ```
 
 All CLI commands output JSON to stdout (exit code 0 = ok, 1 = error).
-The CLI never starts a server and does not use the MCP transport.
+The CLI never starts a server and does not use the stdio transport.
 
 ---
 
-## MCP Inspector
+## Tool Inspector
 
-Use the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) to explore and test the tools interactively:
+Use the [Tool Inspector](https://github.com/modelcontextprotocol/inspector) to explore and test the tools interactively:
 
 ```bash
 npx @modelcontextprotocol/inspector python -m cnc.server
@@ -48,7 +48,7 @@ This opens a browser UI where you can call individual tools like `list_supported
 
 ## Claude Desktop configuration
 
-Add the following to your Claude Desktop MCP configuration file.
+Add the following to your Claude Desktop MCP server configuration file.
 
 **Location:**
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -77,7 +77,7 @@ Add the following to your Claude Desktop MCP configuration file.
 
 ---
 
-## Available MCP tools
+## Available server tools
 
 | Tool | LLM needed | Description |
 |---|---|---|
@@ -117,7 +117,7 @@ Add the following to your Claude Desktop MCP configuration file.
 
 ## Structured error responses
 
-All MCP tools return structured responses. Clients should check `ok`, `errors`, and `warnings`:
+All server tools return structured responses. Clients should check `ok`, `errors`, and `warnings`:
 
 ```json
 {
@@ -819,7 +819,7 @@ Files that cannot be loaded appear in the batch results with `status: "failed"`.
 
 ---
 
-## Tool Library — MCP tool examples
+## Tool Library — server tool examples
 
 ### `list_available_tools` — list all built-in tools
 

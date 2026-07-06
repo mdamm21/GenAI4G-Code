@@ -74,7 +74,7 @@ EXAMPLE_PROMPTS = [
 
 
 async def run_plan_operation(label: str, prompt: str, machine_type: str) -> None:
-    """Call the plan_operation MCP tool and print the result."""
+    """Call the plan_operation server tool and print the result."""
     from cnc.server import plan_operation
 
     print(SEPARATOR)

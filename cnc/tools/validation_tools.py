@@ -374,6 +374,19 @@ def validate_operation_plan(operation_plan: dict) -> dict:
                     "Spindle start (M03) will be skipped."
                 )
 
+    # --- Collect plan-local tool IDs (defined in the plan's tools list) ---
+    plan_local_ids: set[str] = set()
+    for t in tools:
+        if isinstance(t, dict):
+            tid = t.get("id") or t.get("tool_id")
+            if tid:
+                plan_local_ids.add(str(tid))
+            # Also consider tool_number-derived IDs
+            tn = t.get("tool_number")
+            if tn is not None:
+                plan_local_ids.add(str(tn))
+                plan_local_ids.add(f"T{tn}")
+
     # --- Tool library checks (when library is available) ---
     if _HAS_TOOL_LIBRARY and operations:
         for i, op in enumerate(operations):
@@ -384,8 +397,13 @@ def validate_operation_plan(operation_plan: dict) -> dict:
             if not op_tool_id:
                 continue
             op_tool_id = str(op_tool_id)
+
             lib_tool = _get_library_tool(op_tool_id)
             if lib_tool is None:
+                # Unknown in built-in library — check if it's a plan-local reference
+                if op_tool_id in plan_local_ids:
+                    # Plan-local tool (e.g. "T1") — not an unknown library tool
+                    continue
                 # Unknown tool_id — warning only, not an error
                 # (many plans use machine-internal IDs like "T1")
                 warnings.append(
@@ -393,7 +411,7 @@ def validate_operation_plan(operation_plan: dict) -> dict:
                     "which is not in the built-in tool library."
                 )
             else:
-                # Tool is known — check operation type support
+                # Tool is known in library — always check compatibility
                 supported_ops = lib_tool.get("supported_operations", [])
                 if op_type and supported_ops and op_type not in supported_ops:
                     errors.append(

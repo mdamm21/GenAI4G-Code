@@ -1,7 +1,7 @@
 """Milling tools — typed, deterministic helpers for milling operations.
 
 This module provides a safe, parameter-driven path for generating milling G-code
-without an LLM or API key. It backs the MCP tools:
+without an LLM or API key. It backs the server tools:
     - generate_milling_facing_gcode  (rectangular surface facing)
     - generate_milling_slot_gcode    (straight slot/groove along X or Y)
     - generate_milling_pocket_gcode  (rectangular pocket, raster clearing)

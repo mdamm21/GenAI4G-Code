@@ -183,7 +183,7 @@ def normalize_agent_operation_plan(
 
     Args:
         raw: Raw OperationPlan-like dict from agent output.
-        preferred_machine_type: Optional hint from the caller (e.g., MCP param).
+        preferred_machine_type: Optional hint from the caller (e.g., server param).
 
     Returns:
         Normalized OperationPlan dict (shallow copy of raw with defaults applied).

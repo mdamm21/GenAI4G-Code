@@ -49,13 +49,27 @@ def normalize_operation_plan(raw: object) -> dict:
     normalized: dict = dict(raw)
 
     # --- Optional field defaults (never invent machine_type or safe_z) ---
-    normalized.setdefault("units", "mm")
-    normalized.setdefault("work_coordinate_system", "G54")
     normalized.setdefault("tools", [])
     normalized.setdefault("operations", [])
     normalized.setdefault("assumptions", [])
     normalized.setdefault("warnings", [])
     normalized.setdefault("missing_info", [])
+
+    # Track which fields were defaulted (not explicitly provided)
+    if "units" not in raw:
+        normalized["units"] = "mm"
+        normalized["assumptions"].append("Assumed units: mm (not specified in plan)")
+    else:
+        normalized.setdefault("units", raw["units"])
+
+    if "work_coordinate_system" not in raw:
+        normalized["work_coordinate_system"] = "G54"
+        normalized["assumptions"].append("Assumed work coordinate system: G54 (not specified in plan)")
+    else:
+        normalized.setdefault("work_coordinate_system", raw["work_coordinate_system"])
+
+    if "machine_type" not in raw or raw.get("machine_type") is None:
+        normalized["assumptions"].append("Machine type not specified in plan")
 
     # --- Normalize tools ---
     normalized["tools"] = _normalize_tools(normalized["tools"])
@@ -135,3 +149,122 @@ def _parse_tool_id(tool_id: object, fallback: int | None) -> int | None:
         return int(id_str)
     except ValueError:
         return fallback
+
+
+# ---------------------------------------------------------------------------
+# Tool reference normalization
+# ---------------------------------------------------------------------------
+
+
+def normalize_tool_references(operation_plan: dict) -> dict:
+    """Normalize tool_number references to stable plan-local tool IDs.
+
+    When the agent produces tools with ``tool_number`` but no ``id``, this
+    function assigns a canonical plan-local ID (e.g. ``"T1"``) so that
+    validators do not incorrectly look up numeric IDs like ``"1"`` in the
+    built-in tool library.
+
+    Existing real ``id`` / ``tool_id`` values (e.g. ``"drill_5mm"``) are
+    preserved.
+
+    Args:
+        operation_plan: An OperationPlan dict (modified in place and returned).
+
+    Returns:
+        The updated operation_plan dict with:
+        - tools[].id set to "T{tool_number}" when id was missing
+        - operations[].tool_id set to match the corresponding tool id
+    """
+    if not isinstance(operation_plan, dict):
+        return operation_plan
+
+    warnings: list[str] = list(operation_plan.get("warnings", []))
+
+    # Build tool_number → id mapping
+    tool_number_to_id: dict[int | str, str] = {}
+    tools = operation_plan.get("tools", [])
+
+    for t in tools:
+        if not isinstance(t, dict):
+            continue
+
+        existing_id = t.get("id")
+        tool_number = t.get("tool_number")
+
+        if existing_id and not _is_bare_numeric_id(existing_id):
+            # Real tool_id like "drill_5mm" — keep it
+            if tool_number is not None:
+                tool_number_to_id[tool_number] = existing_id
+                tool_number_to_id[str(tool_number)] = existing_id
+        elif tool_number is not None:
+            # No real id or bare numeric id — assign plan-local ID
+            plan_id = f"T{tool_number}"
+            t["id"] = plan_id
+            tool_number_to_id[tool_number] = plan_id
+            tool_number_to_id[str(tool_number)] = plan_id
+        elif existing_id and _is_bare_numeric_id(existing_id):
+            # id is just a number like "1" — normalize to "T1"
+            num = _parse_tool_id(existing_id, None)
+            if num is not None:
+                plan_id = f"T{num}"
+                t["id"] = plan_id
+                if tool_number is None:
+                    t["tool_number"] = num
+
+    # Update operation tool references
+    operations = operation_plan.get("operations", [])
+    for op in operations:
+        if not isinstance(op, dict):
+            continue
+
+        op_tool_id = op.get("tool_id")
+        op_tool_number = op.get("tool_number")
+
+        if op_tool_id and not _is_bare_numeric_id(str(op_tool_id)):
+            # Real tool_id — keep it
+            continue
+
+        # Try to map from tool_number
+        if op_tool_number is not None and op_tool_number in tool_number_to_id:
+            op["tool_id"] = tool_number_to_id[op_tool_number]
+        elif op_tool_number is not None and str(op_tool_number) in tool_number_to_id:
+            op["tool_id"] = tool_number_to_id[str(op_tool_number)]
+        elif op_tool_number is not None:
+            # No matching tool definition — assign plan-local ID anyway
+            op["tool_id"] = f"T{op_tool_number}"
+        elif op_tool_id is not None and _is_bare_numeric_id(str(op_tool_id)):
+            # Bare numeric tool_id like "1" — normalize
+            num = _parse_tool_id(op_tool_id, None)
+            if num is not None:
+                mapped = tool_number_to_id.get(num, tool_number_to_id.get(str(num)))
+                op["tool_id"] = mapped or f"T{num}"
+
+    operation_plan["warnings"] = warnings
+    return operation_plan
+
+
+def _is_bare_numeric_id(tool_id: str) -> bool:
+    """Check if a tool_id is just a bare number (e.g. '1', '01')."""
+    stripped = str(tool_id).strip()
+    try:
+        int(stripped)
+        return True
+    except ValueError:
+        return False
+
+
+def get_plan_local_tool_ids(operation_plan: dict) -> set[str]:
+    """Return the set of tool IDs defined in the plan's tools list.
+
+    These are plan-local references that should NOT be looked up in the
+    built-in tool library.
+    """
+    ids: set[str] = set()
+    if not isinstance(operation_plan, dict):
+        return ids
+    for t in operation_plan.get("tools", []):
+        if isinstance(t, dict):
+            tid = t.get("id")
+            if tid:
+                ids.add(str(tid))
+    return ids

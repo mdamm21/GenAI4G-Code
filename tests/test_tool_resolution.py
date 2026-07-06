@@ -142,6 +142,31 @@ def test_build_pocket_plan_custom_tool_id():
 
 def test_validate_plan_unknown_tool_id_is_warning():
     from cnc.tools.validation_tools import validate_operation_plan
+    # Tool ID not in plan tools AND not in built-in library → warning
+    plan = {
+        "machine_type": "drill",
+        "units": "mm",
+        "safe_z": 5.0,
+        "tools": [],
+        "operations": [
+            {
+                "type": "drill",
+                "tool_id": "UNKNOWN_XYZ",
+                "feedrate": 100,
+                "parameters": {"x": 0, "y": 0, "z": -5},
+            }
+        ],
+        "material": "aluminum",
+    }
+    result = validate_operation_plan(plan)
+    # Unknown tool_id → warning, not error
+    assert result["ok"] is True
+    assert any("UNKNOWN_XYZ" in w for w in result["warnings"])
+
+
+def test_validate_plan_plan_local_tool_no_unknown_warning():
+    from cnc.tools.validation_tools import validate_operation_plan
+    # Tool ID defined in plan tools list → no unknown tool warning
     plan = {
         "machine_type": "drill",
         "units": "mm",
@@ -158,9 +183,10 @@ def test_validate_plan_unknown_tool_id_is_warning():
         "material": "aluminum",
     }
     result = validate_operation_plan(plan)
-    # Unknown tool_id → warning, not error
     assert result["ok"] is True
-    assert any("T1" in w for w in result["warnings"])
+    # T1 is plan-local → no "not in the built-in tool library" warning
+    unknown_warnings = [w for w in result["warnings"] if "not in the built-in tool library" in w]
+    assert unknown_warnings == []
 
 
 def test_validate_plan_known_tool_correct_op_no_error():

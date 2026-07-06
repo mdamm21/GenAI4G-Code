@@ -1,4 +1,4 @@
-"""Demo for the typed generate_drill_gcode MCP tool — no LLM or API key needed.
+"""Demo for the typed generate_drill_gcode server tool — no LLM or API key needed.
 
 Shows the full deterministic pipeline:
     explicit parameters -> OperationPlan -> validate -> postprocess -> G-code
@@ -71,7 +71,7 @@ def _run_case(label: str, **kwargs) -> None:
 
 def main() -> int:
     print("\n" + "=" * 62)
-    print("  GENAI4G-CODE — generate_drill_gcode MCP Tool Demo")
+    print("  GENAI4G-CODE — generate_drill_gcode Tool Demo")
     print("  Deterministic pipeline — no LLM or API key required")
     print("=" * 62)
 

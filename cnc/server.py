@@ -1,14 +1,14 @@
-"""CNC MCP Server — outer tool API for the CNC G-code generation system.
+"""CNC MCP Server — outer MCP tool API for the CNC G-code generation system.
 
 Exposes CNC tools via the Model Context Protocol (MCP).
 The DeepAgent (cnc.agent) is the internal orchestrator — never called directly by users.
 
 Architecture:
-    MCP client -> cnc/server.py (tool API)
-               -> cnc/agent.py  (orchestrator, next step)
-               -> cnc/tools/*   (validation, postprocessing)
-               -> cnc/validators/*  (G-code safety checks)
-               -> cnc/postprocessors/* (deterministic G-code generation)
+    Client -> cnc/server.py (MCP tool API)
+           -> cnc/agent.py  (orchestrator, next step)
+           -> cnc/tools/*   (validation, postprocessing)
+           -> cnc/validators/*  (G-code safety checks)
+           -> cnc/postprocessors/* (deterministic G-code generation)
 
 Start with:
     python -m cnc.server
@@ -28,14 +28,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ---------------------------------------------------------------------------
-# FastMCP setup
+# MCP server setup (FastMCP runtime)
 # ---------------------------------------------------------------------------
 
 try:
     from mcp.server.fastmcp import FastMCP
 except ImportError as exc:
     raise ImportError(
-        "mcp package is required. Install with: pip install mcp[cli]"
+        "FastMCP runtime is required. Install with: pip install mcp[cli]"
     ) from exc
 
 from cnc.tools.postprocess_tools import postprocess_operations

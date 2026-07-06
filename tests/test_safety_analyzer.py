@@ -474,3 +474,64 @@ def test_wcs_detected_info_finding():
     result = analyze_gcode_safety(CLEAN_DRILL_GCODE, "drill")
     info_codes = [f["code"] for f in result["findings"] if f["severity"] == "info"]
     assert "WCS_DETECTED" in info_codes
+
+
+# ---------------------------------------------------------------------------
+# N) G91 stateful analysis — G28 G91 Z0 idiom
+# ---------------------------------------------------------------------------
+
+
+G90_DRILL_WITH_G28_G91_GCODE = """\
+G21
+G90
+G54
+G0 Z5
+S1200 M3
+G1 Z-18 F80
+G0 Z5
+M5
+G28 G91 Z0
+G90
+M30"""
+
+
+def test_g28_g91_no_relative_negative_z_for_earlier_g90_moves():
+    """Z-18 under G90 must NOT trigger RELATIVE_NEGATIVE_Z / G91_NEGATIVE_Z."""
+    result = analyze_gcode_safety(G90_DRILL_WITH_G28_G91_GCODE, "drill")
+    warning_codes = [f["code"] for f in result["findings"] if f["severity"] == "warning"]
+    assert "G91_NEGATIVE_Z" not in warning_codes
+
+
+def test_g28_g91_scoped_idiom_info_or_warning():
+    """G28 G91 Z0 / G90 should produce at most one info or warning for the idiom."""
+    result = analyze_gcode_safety(G90_DRILL_WITH_G28_G91_GCODE, "drill")
+    g91_findings = [f for f in result["findings"]
+                    if f["code"] == "RELATIVE_POSITIONING"]
+    assert len(g91_findings) <= 1
+    if g91_findings:
+        # Should be info (scoped idiom), not warning
+        assert g91_findings[0]["severity"] == "info"
+
+
+def test_g28_g91_no_duplicate_warnings():
+    """G91 should not produce multiple separate warnings."""
+    result = analyze_gcode_safety(G90_DRILL_WITH_G28_G91_GCODE, "drill")
+    g91_findings = [f for f in result["findings"]
+                    if "G91" in f.get("code", "") or "RELATIVE" in f.get("code", "")]
+    # At most one finding for the scoped G91 idiom
+    assert len(g91_findings) <= 1
+
+
+def test_real_relative_negative_z_warns():
+    """Actual G91 with negative Z cutting should warn."""
+    gcode = "G21\nG91\nG1 Z-5 F100\nM30"
+    result = analyze_gcode_safety(gcode, "mill")
+    warning_codes = [f["code"] for f in result["findings"] if f["severity"] == "warning"]
+    assert "G91_NEGATIVE_Z" in warning_codes
+
+
+def test_real_relative_negative_z_risk():
+    """G91 negative Z should produce at least medium risk."""
+    gcode = "G21\nG91\nG1 Z-5 F100\nM30"
+    result = analyze_gcode_safety(gcode, "mill")
+    assert result["risk_level"] in ("medium", "high")

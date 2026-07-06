@@ -1,4 +1,4 @@
-"""Tests for cnc/server.py MCP tool functions — import-level, no MCP client needed."""
+"""Tests for cnc/server.py tool functions — import-level, no server client needed."""
 
 import pytest
 
@@ -152,7 +152,7 @@ def test_generate_gcode_importable():
 def test_generate_gcode_is_async_or_callable():
     import asyncio
     from cnc.server import generate_gcode
-    # generate_gcode is an async function decorated by FastMCP
+    # generate_gcode is an async function decorated by the MCP server
     # We only verify it is importable and callable — we do NOT invoke it
     # (would require a running event loop and optionally an API key)
     assert callable(generate_gcode)

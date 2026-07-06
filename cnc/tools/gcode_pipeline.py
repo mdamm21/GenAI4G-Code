@@ -165,6 +165,19 @@ def regenerate_gcode_from_operation_plan(
             or default_postprocessor
         )
 
+        # Track if postprocessor was assumed (not explicitly specified)
+        if not result.get("postprocessor") and not op.get("postprocessor"):
+            op.setdefault("assumptions", [])
+            op["assumptions"].append(
+                f"Assumed postprocessor: {resolved_pp} (not specified in plan or result)"
+            )
+
+        # ------------------------------------------------------------------
+        # Normalize tool references before validation
+        # ------------------------------------------------------------------
+        from cnc.tools.operation_plan_tools import normalize_tool_references
+        op = normalize_tool_references(op)
+
         # ------------------------------------------------------------------
         # Validate operation_plan
         # ------------------------------------------------------------------

@@ -1,6 +1,6 @@
-"""Response contract helpers for MCP tool responses.
+"""Response contract helpers for server tool responses.
 
-Provides standardised envelope builders for MCP tool return values.
+Provides standardised envelope builders for MCP server return values.
 
 Conventions
 -----------

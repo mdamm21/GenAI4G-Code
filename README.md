@@ -1,6 +1,6 @@
 # GENAI4G-CODE
 
-CNC G-code generation pipeline using Claude AI, MCP (Model Context Protocol), and a multi-agent architecture.
+CNC G-code generation pipeline using Claude AI, a LangChain DeepAgent harness, and a multi-agent architecture.
 
 ---
 
@@ -10,7 +10,7 @@ CNC G-code generation pipeline using Claude AI, MCP (Model Context Protocol), an
 User Prompt
     │
     ▼
-cnc/server.py          ← MCP outer API (FastMCP tools)
+cnc/server.py          ← outer tool API (LangChain DeepAgent harness)
     │
     ▼
 cnc/agent.py           ← CNC Supervisor Agent (Anthropic tool-use loop)
@@ -68,14 +68,14 @@ ANTHROPIC_API_KEY=your-key-here
 
 ---
 
-## Typed Drill MCP Tool
+## Typed Drill Server Tool
 
 `generate_drill_gcode` is the safe, deterministic MVP path — no LLM, no API key.
 
 It accepts explicit machining parameters, builds a structured OperationPlan,
 validates the plan, runs the postprocessor, and validates the G-code output.
 
-**Example parameters (MCP Inspector / Claude Desktop):**
+**Example parameters (Tool Inspector / Claude Desktop):**
 
 ```json
 {
@@ -112,10 +112,10 @@ Compared to `generate_gcode(prompt=...)`:
 
 ## Milling Facing MVP
 
-The `generate_milling_facing_gcode` MCP tool generates conservative facing
+The `generate_milling_facing_gcode` server tool generates conservative facing
 (surface milling) G-code for a **rectangular area** without an LLM or API key.
 
-**Example parameters (MCP Inspector / Claude Desktop):**
+**Example parameters (Tool Inspector / Claude Desktop):**
 
 ```json
 {
@@ -150,10 +150,10 @@ python scripts/demo_milling_facing_mvp.py
 
 ## Milling Pocket MVP
 
-The `generate_milling_pocket_gcode` MCP tool generates conservative rectangular
+The `generate_milling_pocket_gcode` server tool generates conservative rectangular
 pocket G-code without an LLM or API key.
 
-**Example parameters (MCP Inspector / Claude Desktop):**
+**Example parameters (Tool Inspector / Claude Desktop):**
 
 ```json
 {
@@ -190,10 +190,10 @@ python -m scripts.demo_milling_pocket_mvp
 
 ## Milling Slot MVP
 
-The `generate_milling_slot_gcode` MCP tool generates conservative straight-slot
+The `generate_milling_slot_gcode` server tool generates conservative straight-slot
 G-code along X or Y without an LLM or API key.
 
-**Example parameters (MCP Inspector / Claude Desktop):**
+**Example parameters (Tool Inspector / Claude Desktop):**
 
 ```json
 {
@@ -228,10 +228,10 @@ python scripts/demo_milling_slot_mvp.py
 
 ## Multi-Hole Drill Pattern MVP
 
-The `generate_drill_pattern_gcode` MCP tool generates conservative drilling
+The `generate_drill_pattern_gcode` server tool generates conservative drilling
 G-code for **multiple explicit hole positions** without an LLM or API key.
 
-**Example parameters (MCP Inspector / Claude Desktop):**
+**Example parameters (Tool Inspector / Claude Desktop):**
 
 ```json
 {
@@ -262,7 +262,7 @@ python scripts/demo_drill_pattern_mvp.py
 ### Machine Profiles
 
 Machine profiles supply safe defaults for known machine configurations.
-Available profiles can be listed with the `list_profiles` MCP tool.
+Available profiles can be listed with the `list_profiles` server tool.
 
 | Profile | machine_type | units | default_safe_z | default_feedrate | default_spindle |
 |---|---|---|---|---|---|
@@ -313,7 +313,7 @@ python -m scripts.demo_postprocessor_dialects
 
 ## Natural-Language Planning v1
 
-The `plan_operation` and `generate_gcode` MCP tools use a CNC DeepAgent to
+The `plan_operation` and `generate_gcode` server tools use a CNC DeepAgent to
 parse natural language and produce structured G-code — but with strict architectural
 safeguards.
 
@@ -389,7 +389,7 @@ python -m scripts.demo_agent_result_normalization
 
 ## G-Code Safety Analyzer v1
 
-The `analyze_gcode_safety_report` MCP tool performs **structured static analysis** of any
+The `analyze_gcode_safety_report` server tool performs **structured static analysis** of any
 G-code program and returns a risk-scored safety report — no LLM or API key required.
 
 It does **not** simulate machine motion and does **not** replace expert review or CAM simulation.
@@ -411,7 +411,7 @@ All results are advisory only.
 
 **Risk levels:** `low` (no issues) / `medium` (warnings only) / `high` (one or more errors)
 
-**Example parameters (MCP Inspector / Claude Desktop):**
+**Example parameters (Tool Inspector / Claude Desktop):**
 
 ```json
 {
@@ -467,7 +467,7 @@ Each material entry contains: `notes` (informational), `warnings` (cautions), `s
 
 Guardrails **never** modify the plan and **never** derive cutting parameters.
 
-### New MCP Tools
+### New Server Tools
 
 | Tool | Description |
 |---|---|
@@ -528,7 +528,7 @@ This is implemented in `cnc/tools/gcode_pipeline.py` via `regenerate_gcode_from_
 - Invalid `OperationPlan` → `gcode=""` and validation errors (old agent G-code is NOT kept).
 - `operation_plan` returned as a list → first item is used with a warning.
 - Postprocessor selection order: `result["postprocessor"]` → `operation_plan["postprocessor"]` → `default_postprocessor`.
-- The same pipeline is used in both `CNCAgent.run()` and the MCP `generate_gcode` tool.
+- The same pipeline is used in both `CNCAgent.run()` and the `generate_gcode` server tool.
 
 ### Demo (no API key required)
 
@@ -586,7 +586,7 @@ result = job_spec_to_gcode(loaded["job"])
 print(result["gcode"])
 ```
 
-### New MCP tools
+### New server tools
 
 | Tool | Description |
 |---|---|
@@ -721,7 +721,7 @@ print(result["batch_report"]["status"])      # "ok" / "warning" / "mixed" / "fai
 print(result["batch_report"]["ok_count"])
 ```
 
-### New MCP tools
+### New server tools
 
 | Tool | Description |
 |---|---|
@@ -798,7 +798,7 @@ print(result["run_report"]["status"])   # "ok" / "warning" / "failed"
 print(result["gcode"][:200])
 ```
 
-### New MCP tools
+### New server tools
 
 | Tool | Description |
 |---|---|
@@ -869,7 +869,7 @@ plan = build_drill_operation_plan(
 )
 ```
 
-### New MCP tools (Tools 32–36)
+### New server tools (Tools 32–36)
 
 | Tool | Description |
 |---|---|
@@ -915,15 +915,15 @@ python scripts/test_drill_pipeline.py
 
 ---
 
-## Run the MCP server
+## Run the MCP Server
 
 ```bash
 python -m cnc.server
 ```
 
-The server speaks the MCP stdio protocol. Use with an MCP client or the MCP Inspector.
+The server speaks the stdio protocol. Use with a tool client or the Tool Inspector.
 
-See [docs/mcp_setup.md](docs/mcp_setup.md) for Claude Desktop and Inspector configuration.
+See [docs/mcp_setup.md](docs/mcp_setup.md) for Claude Desktop and Tool Inspector configuration.
 
 ---
 
@@ -957,14 +957,14 @@ GenAI4G-Code/
 │   └── test_drill_pipeline.py  # End-to-end pipeline test
 ├── tests/                      # pytest test suite
 └── docs/
-    └── mcp_setup.md            # MCP Inspector & Claude Desktop setup
+    └── mcp_setup.md            # Tool Inspector & Claude Desktop setup
 ```
 
 ---
 
-## MCP Response Contracts
+## Response Contracts
 
-All MCP tools return structured JSON responses. Complex tools use a standard envelope:
+All server tools return structured JSON responses. Complex tools use a standard envelope:
 
 ```json
 {
@@ -1001,6 +1001,61 @@ G-code generation tools additionally include domain-specific top-level fields:
 - `ok: true` with non-empty `warnings` means the G-code was generated but review is recommended.
 
 The response contract helpers live in `cnc/tools/response_contracts.py`.
+
+---
+
+## Interactive Warning Resolution
+
+When running the CNC pipeline via the root `agent.py` CLI, actionable warnings are presented interactively before G-code output. The core pipeline and MCP server remain completely non-interactive.
+
+### CLI Flow
+
+```
+python agent.py "Drill 6 holes on a 80mm bolt circle for M8 bolts, 18mm deep in steel, safe Z 5mm"
+```
+
+When actionable warnings are detected, the CLI will:
+
+1. **Group duplicate warnings** - e.g. 6 identical "unknown tool" warnings become 1 issue
+2. **Present context-aware choices** for each actionable issue:
+   - Select a matching tool from the library
+   - Use the tool described in the OperationPlan as a temporary custom tool
+   - Confirm inferred material from the prompt
+   - Enter parameters manually (feedrate, spindle speed, safe Z)
+   - Ignore a warning for this run
+   - Abort
+3. **Regenerate G-code deterministically** after any plan-modifying resolution
+4. **Only display final G-code** after explicit user confirmation
+
+### Supported Issue Types
+
+| Code | Category | Actionable | Blocking |
+|------|----------|------------|----------|
+| `UNKNOWN_TOOL_ID` | tool | yes | no |
+| `MISSING_MATERIAL` | material | yes | no |
+| `MISSING_FEEDRATE` | parameter | yes | yes |
+| `MISSING_SPINDLE_SPEED` | parameter | yes | no |
+| `MISSING_SAFE_Z` | parameter | yes | yes |
+| `TOOL_DIAMETER_MISMATCH` | tool | yes | no |
+| `AGENT_GCODE_DISCARDED` | info | no | no |
+| `RELATIVE_POSITIONING` | safety | no | no |
+
+### CLI Flags
+
+| Flag | Effect |
+|------|--------|
+| `--non-interactive` | No interactive prompts; show issues structured; no G-code if blocking |
+| `--warnings-as-errors` | All actionable warnings block G-code output |
+| `--auto-continue` | Automatically continue past non-blocking warnings |
+
+### Architecture
+
+- **Core pipeline** (`cnc/agent.py`, `cnc/tools/*`, `cnc/validators/*`) remains non-interactive
+- **MCP server** (`cnc/server.py`) never waits on stdin
+- **Issue collection** (`cnc/tools/issue_resolution.py`) gathers and deduplicates warnings from all pipeline stages
+- **CLI interaction** (`cnc/cli_interaction.py`) handles all user-facing prompts via injected `input_fn`/`output_fn`
+- **Resolution log** records every user decision for traceability
+- **Tool reference normalization** assigns stable plan-local IDs (e.g. `T1`) to prevent false "unknown tool" warnings
 
 ---
 

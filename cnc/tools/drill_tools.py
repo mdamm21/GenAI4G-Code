@@ -1,7 +1,7 @@
 """Drill tools — typed, deterministic helpers for drill operations.
 
 This module provides a safe, parameter-driven path for generating drill G-code
-without an LLM or API key. It backs the MCP tools `generate_drill_gcode`
+without an LLM or API key. It backs the server tools `generate_drill_gcode`
 (single hole) and `generate_drill_pattern_gcode` (multiple holes).
 
 Pipeline:

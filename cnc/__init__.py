@@ -1,2 +1,2 @@
 # cnc — CNC G-code generation package
-# MCP Server outside, DeepAgent inside architecture
+# MCP server outside, DeepAgent inside architecture

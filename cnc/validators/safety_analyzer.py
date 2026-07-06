@@ -191,9 +191,13 @@ def analyze_gcode_safety(
     spindle_off_lines: list[int] = []    # line indices with M5
     spindle_speed_before_on: dict[int, bool] = {}  # line_idx → had S value
 
-    # For G91 + negative Z pattern
+    # For G91 + negative Z pattern — stateful per-line tracking
     current_positioning = "absolute"  # assume absolute until G91 seen
     has_g91 = False
+    # Track Z values seen while in relative mode (for RELATIVE_NEGATIVE_Z)
+    relative_z_negatives: list[tuple[int, float]] = []  # (line_num, z_value)
+    # Track G28 G91 idiom
+    g28_g91_lines: list[int] = []
 
     # Rapid Z-negative tracking
     rapid_z_neg_lines: list[int] = []
@@ -223,7 +227,7 @@ def analyze_gcode_safety(
             spindle_speeds.extend(s_vals)
             last_s_value = s_vals[-1]
 
-        # Units
+        # Units and positioning — process in order for stateful tracking
         for g in gcodes:
             if g == "20":
                 units_codes.append("20")
@@ -238,6 +242,16 @@ def analyze_gcode_safety(
                 current_positioning = "relative"
             elif g in ("54", "55", "56", "57", "58", "59"):
                 wcs_codes.append(g)
+
+        # Detect G28 G91 idiom (G28 and G91 on same line)
+        if "28" in gcodes and "91" in gcodes:
+            g28_g91_lines.append(line_num)
+
+        # Track negative Z while in relative mode (but not G28 G91 idiom lines)
+        if current_positioning == "relative" and z_vals and line_num not in [l for l in g28_g91_lines]:
+            for z in z_vals:
+                if z < 0:
+                    relative_z_negatives.append((line_num, z))
 
         # E values (3D printer extrusion)
         if re.search(r'\bE[-\d.]', stripped, re.IGNORECASE):
@@ -436,19 +450,29 @@ def analyze_gcode_safety(
             "No positioning mode found (G90 absolute / G91 incremental). Assumed G90.",
         ))
 
-    # G91 relative positioning
+    # G91 relative positioning — stateful analysis
     if has_g91:
-        findings.append(_finding(
-            "warning", "RELATIVE_POSITIONING",
-            "G91 relative positioning detected. Incremental mode can cause unexpected "
-            "motion if not properly initialized. Verify all moves are intentional.",
-        ))
+        if g28_g91_lines and not relative_z_negatives:
+            # G91 is only used for G28 return-to-reference idiom — downgrade to info
+            findings.append(_finding(
+                "info", "RELATIVE_POSITIONING",
+                "Scoped G91 used for G28 return-to-reference sequence.",
+            ))
+        else:
+            findings.append(_finding(
+                "warning", "RELATIVE_POSITIONING",
+                "G91 relative positioning detected. Incremental mode can cause unexpected "
+                "motion if not properly initialized. Verify all moves are intentional.",
+            ))
 
-    # G91 + negative Z together
-    if has_g91 and min_z is not None and min_z < 0:
+    # G91 + negative Z — only warn if negative Z actually occurs during relative mode
+    if relative_z_negatives:
+        worst_z = min(z for _, z in relative_z_negatives)
+        lines_str = ", ".join(str(ln) for ln, _ in relative_z_negatives[:5])
         findings.append(_finding(
             "warning", "G91_NEGATIVE_Z",
-            f"Relative positioning (G91) combined with negative Z value ({min_z}). "
+            f"Relative positioning (G91) with negative Z value ({worst_z}) "
+            f"on line(s) {lines_str}. "
             "Incremental Z moves may produce unexpected depth if origin is not correctly set.",
         ))
 

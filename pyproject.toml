@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "genai4g"
 version = "0.1.0"
-description = "GenAI4G — Claude agent with MCP server skills"
+description = "GenAI4G — CNC G-code generation via MCP (Model Context Protocol)"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.54.0",

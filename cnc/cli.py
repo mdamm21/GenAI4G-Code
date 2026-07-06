@@ -229,7 +229,7 @@ def _cmd_server(args: argparse.Namespace) -> int:
     print(
         "To start the MCP server run:\n"
         "    python -m cnc.server\n\n"
-        "The server uses stdio transport and will wait for MCP messages."
+        "The server uses stdio transport and will wait for tool messages."
     )
     return 0
 
