@@ -545,3 +545,42 @@ def generate_drill_pattern_gcode_from_params(
             "postprocessor": postprocessor,
             "machine_profile": machine_profile,
         }
+
+
+# ---------------------------------------------------------------------------
+# Bolt circle coordinate calculator
+# ---------------------------------------------------------------------------
+
+import math
+
+
+def calculate_bolt_circle_positions(
+    center_x: float,
+    center_y: float,
+    radius: float,
+    num_holes: int,
+    start_angle_deg: float = 0.0,
+) -> list[dict]:
+    """Calculate individual hole positions for a bolt circle pattern.
+
+    Returns a list of dicts with keys ``x`` and ``y`` (rounded to 3 decimals).
+    This is a pure geometry helper — no plan types, no G-code.
+
+    Args:
+        center_x: Bolt circle center X coordinate.
+        center_y: Bolt circle center Y coordinate.
+        radius:   Bolt circle radius.
+        num_holes: Number of equally-spaced holes.
+        start_angle_deg: Angular position of the first hole in degrees
+                         (0° = positive X axis, counter-clockwise).
+
+    Returns:
+        List of ``{"x": float, "y": float}`` for each hole.
+    """
+    positions: list[dict] = []
+    for i in range(num_holes):
+        angle_rad = math.radians(start_angle_deg + i * 360.0 / num_holes)
+        x = round(center_x + radius * math.cos(angle_rad), 3)
+        y = round(center_y + radius * math.sin(angle_rad), 3)
+        positions.append({"x": x, "y": y})
+    return positions

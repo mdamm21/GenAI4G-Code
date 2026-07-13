@@ -96,17 +96,23 @@ def _normalize_tools(tools: list) -> list:
         if "name" in nt and "description" not in nt:
             nt["description"] = nt["name"]
 
-        # diameter / diameter_mm
+        # diameter / diameter_mm — canonicalize then remove deprecated alias
         if "diameter" in nt and "diameter_mm" not in nt:
             nt["diameter_mm"] = nt["diameter"]
+        if "diameter_mm" in nt:
+            nt.pop("diameter", None)
 
         # spindle_speed / spindle_rpm (stored on tool in some agent formats)
         if "spindle_speed" in nt and "spindle_rpm" not in nt:
             nt["spindle_rpm"] = nt["spindle_speed"]
+        if "spindle_rpm" in nt:
+            nt.pop("spindle_speed", None)
 
         # feedrate on tool level → feedrate_mmpm (carry-over info, not canonical)
         if "feedrate" in nt and "feedrate_mmpm" not in nt:
             nt["feedrate_mmpm"] = nt["feedrate"]
+        if "feedrate_mmpm" in nt:
+            nt.pop("feedrate", None)
 
         result.append(nt)
     return result
@@ -124,13 +130,17 @@ def _normalize_operations(operations: list) -> list:
         if "tool_id" in nop and "tool_number" not in nop:
             nop["tool_number"] = _parse_tool_id(nop["tool_id"], fallback=None)
 
-        # feedrate / feedrate_mmpm
+        # feedrate / feedrate_mmpm — canonicalize then remove deprecated alias
         if "feedrate" in nop and "feedrate_mmpm" not in nop:
             nop["feedrate_mmpm"] = nop["feedrate"]
+        if "feedrate_mmpm" in nop:
+            nop.pop("feedrate", None)
 
-        # spindle_speed / spindle_rpm
+        # spindle_speed / spindle_rpm — canonicalize then remove deprecated alias
         if "spindle_speed" in nop and "spindle_rpm" not in nop:
             nop["spindle_rpm"] = nop["spindle_speed"]
+        if "spindle_rpm" in nop:
+            nop.pop("spindle_speed", None)
 
         # description / name
         if "description" in nop and "name" not in nop:

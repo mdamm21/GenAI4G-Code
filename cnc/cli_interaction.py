@@ -46,6 +46,13 @@ def resolve_issues_interactively(
     # Collect issues
     issues = collect_interactive_issues(result, prompt=prompt)
 
+    # Preserve initial issues snapshot (first pass only)
+    if "initial_issues" not in result:
+        result["initial_issues"] = [
+            {k: v for k, v in i.items() if k != "choices"}
+            for i in issues
+        ]
+
     if not issues:
         output_fn("\nNo actionable issues found.")
         return result
@@ -54,12 +61,21 @@ def resolve_issues_interactively(
     actionable = [i for i in issues if i.get("actionable")]
     info_only = [i for i in issues if not i.get("actionable")]
 
-    # Show info-only issues
+    # Show and log info-only issues
     if info_only:
         output_fn("\n--- Informational ---")
         for issue in info_only:
             sev = issue["severity"].upper()
             output_fn(f"  [{sev}] {issue['title']}: {issue['message']}")
+            # Log acknowledgement so the full chain is traceable
+            result["resolution_log"].append({
+                "issue_code": issue.get("code", ""),
+                "action": "ACKNOWLEDGED",
+                "title": issue.get("title", ""),
+                "message": issue.get("message", ""),
+                "severity": issue.get("severity", ""),
+                "affected_operations": list(issue.get("affected_operations", [])),
+            })
         output_fn("")
 
     if not actionable:
@@ -136,8 +152,10 @@ def resolve_issues_interactively(
     # Re-collect issues after regeneration
     remaining = collect_interactive_issues(result, prompt=prompt)
     blocking = [i for i in remaining if i.get("blocking") and i.get("severity") == "error"]
-    warnings_remaining = [i for i in remaining
-                          if i.get("severity") == "warning" and i.get("actionable")]
+    actionable_remaining = [i for i in remaining
+                            if i.get("severity") == "warning" and i.get("actionable")]
+    info_remaining = [i for i in remaining if not i.get("actionable")
+                      and i.get("severity") != "error"]
 
     if blocking:
         output_fn(f"\n{len(blocking)} blocking error(s) remain. Cannot output G-code.")
@@ -146,8 +164,9 @@ def resolve_issues_interactively(
         result["gcode_display_allowed"] = False
         return result
 
-    if warnings_remaining:
-        output_fn(f"\nRemaining warnings: {len(warnings_remaining)}")
+    all_remaining = actionable_remaining + info_remaining
+    if all_remaining:
+        output_fn(f"\nRemaining warnings: {len(all_remaining)}")
         output_fn("")
         output_fn("  1. Show warnings and continue to G-code")
         output_fn("  2. Go back and review")
@@ -169,12 +188,26 @@ def resolve_issues_interactively(
                                                  input_fn=input_fn,
                                                  output_fn=output_fn)
         else:
-            # Show remaining warnings and continue
-            for w in warnings_remaining:
+            # Show ALL remaining warnings (actionable + informational)
+            for w in actionable_remaining:
                 output_fn(f"  [WARN] {w['message']}")
+            for w in info_remaining:
+                output_fn(f"  [INFO] {w['message']}")
             result["gcode_display_allowed"] = True
     else:
         result["gcode_display_allowed"] = True
+
+    # Consolidate all warnings for downstream consumers (G-code header etc.)
+    all_warnings = _consolidate_all_warnings(result)
+    result["all_warnings"] = all_warnings
+
+    # Inject into operation_plan so postprocessors can include them in G-code header
+    op_plan = result.get("operation_plan")
+    if isinstance(op_plan, dict):
+        op_plan["consolidated_warnings"] = [
+            w["message"] for w in all_warnings
+            if w["severity"] in ("warning", "error")
+        ]
 
     return result
 
@@ -326,22 +359,26 @@ def _build_decision(
             return {"action": "IGNORE_ONCE", "payload": {}}
 
     elif action == "SET_FEEDRATE":
-        output_fn("")
-        val = _get_numeric_input("  Enter feedrate (mm/min): ", input_fn, output_fn)
-        if val is not None and val > 0:
-            payload["feedrate"] = val
-        else:
-            output_fn("  Invalid feedrate. Ignoring.")
-            return {"action": "IGNORE_ONCE", "payload": {}}
+        if not payload.get("feedrate"):
+            output_fn("")
+            val = _get_numeric_input("  Enter feedrate (mm/min): ", input_fn, output_fn)
+            if val is not None and val > 0:
+                payload["feedrate"] = val
+            else:
+                output_fn("  Invalid feedrate. Ignoring.")
+                return {"action": "IGNORE_ONCE", "payload": {}}
 
     elif action == "SET_SPINDLE_SPEED":
-        output_fn("")
-        val = _get_numeric_input("  Enter spindle speed (RPM): ", input_fn, output_fn)
-        if val is not None and val > 0:
-            payload["spindle_speed"] = val
-        else:
-            output_fn("  Invalid spindle speed. Ignoring.")
-            return {"action": "IGNORE_ONCE", "payload": {}}
+        # If the choice already has a spindle_speed (e.g. from recommendation),
+        # use it directly without prompting.
+        if not payload.get("spindle_speed"):
+            output_fn("")
+            val = _get_numeric_input("  Enter spindle speed (RPM): ", input_fn, output_fn)
+            if val is not None and val > 0:
+                payload["spindle_speed"] = val
+            else:
+                output_fn("  Invalid spindle speed. Ignoring.")
+                return {"action": "IGNORE_ONCE", "payload": {}}
 
     elif action == "SET_SAFE_Z":
         output_fn("")
@@ -351,6 +388,44 @@ def _build_decision(
         else:
             output_fn("  Invalid value. Ignoring.")
             return {"action": "IGNORE_ONCE", "payload": {}}
+
+    elif action == "CONFIRM_BOLT_CIRCLE_CENTER":
+        # Confirmation — payload already contains center_x/center_y
+        pass
+
+    elif action == "SET_BOLT_CIRCLE_CENTER":
+        output_fn("")
+        cx = _get_numeric_input("  Enter center X: ", input_fn, output_fn)
+        if cx is None:
+            output_fn("  Invalid value. Aborting.")
+            return {"action": "IGNORE_ONCE", "payload": {}}
+        cy = _get_numeric_input("  Enter center Y: ", input_fn, output_fn)
+        if cy is None:
+            output_fn("  Invalid value. Aborting.")
+            return {"action": "IGNORE_ONCE", "payload": {}}
+        payload["center_x"] = cx
+        payload["center_y"] = cy
+
+    elif action == "CONFIRM_BOLT_CIRCLE_START_ANGLE":
+        # Confirmation — payload already contains start_angle_deg
+        pass
+
+    elif action == "SET_BOLT_CIRCLE_START_ANGLE":
+        output_fn("")
+        val = _get_numeric_input("  Enter start angle (degrees): ", input_fn, output_fn)
+        if val is not None:
+            payload["start_angle_deg"] = val
+        else:
+            output_fn("  Invalid value. Aborting.")
+            return {"action": "IGNORE_ONCE", "payload": {}}
+
+    elif action == "SET_BOLT_CIRCLE_HOLE_TYPE":
+        # hole_type is already set in payload from the choice
+        pass
+
+    elif action == "CONFIRM_Z_REFERENCE":
+        # Confirmation — payload already contains z_reference
+        pass
 
     elif action == "SET_CUSTOM_DIAMETER":
         output_fn("")
@@ -391,8 +466,116 @@ def _get_numeric_input(
     return None
 
 
+def _consolidate_all_warnings(result: dict) -> list[dict]:
+    """Build a deduplicated list of all warnings from every pipeline stage.
+
+    Each entry: {source, severity, message}.
+    This is the single authoritative list that downstream consumers
+    (G-code header, final report) should use.
+    """
+    seen: set[str] = set()
+    consolidated: list[dict] = []
+
+    def _add(msg: str, severity: str, source: str) -> None:
+        if msg and msg not in seen:
+            seen.add(msg)
+            consolidated.append({"source": source, "severity": severity, "message": msg})
+
+    # operation_plan warnings
+    op = result.get("operation_plan", {})
+    if isinstance(op, dict):
+        for w in op.get("warnings", []):
+            _add(w, "warning", "operation_plan")
+        for a in op.get("assumptions", []):
+            _add(a, "info", "assumption")
+
+    # validation
+    val = result.get("validation", {})
+    if isinstance(val, dict):
+        for w in val.get("warnings", []):
+            _add(w, "warning", "validation")
+        for e in val.get("errors", []):
+            _add(e, "error", "validation")
+
+    # safety_report
+    sr = result.get("safety_report", {})
+    if isinstance(sr, dict):
+        for w in sr.get("warnings", []):
+            _add(w, "warning", "safety")
+        for f in sr.get("findings", []):
+            if isinstance(f, dict) and f.get("message"):
+                _add(f["message"], f.get("severity", "warning"), "safety")
+
+    # guardrails
+    gr = result.get("guardrails", {})
+    if isinstance(gr, dict):
+        for w in gr.get("warnings", []):
+            _add(w, "warning", "guardrail")
+
+    # resolution_log: include acknowledged informational issues, but
+    # skip those whose content is about issues that were subsequently
+    # resolved (e.g. "feedrate missing" after SET_FEEDRATE).
+    from cnc.tools.issue_resolution import _RESOLVED_CLEANUP_PATTERNS
+
+    resolved_pats: list = []
+    for entry in result.get("resolution_log", []):
+        action = entry.get("action", "")
+        if action not in ("ACKNOWLEDGED", "IGNORE_ONCE"):
+            code = entry.get("issue_code", "")
+            for p in _RESOLVED_CLEANUP_PATTERNS.get(code, []):
+                resolved_pats.append(p)
+
+    for entry in result.get("resolution_log", []):
+        if entry.get("action") == "ACKNOWLEDGED" and entry.get("message"):
+            msg = entry["message"]
+            # Skip if content matches a resolved issue's cleanup pattern
+            if resolved_pats and any(p.search(msg) for p in resolved_pats):
+                continue
+            _add(msg, entry.get("severity", "info"), "acknowledged")
+
+    return consolidated
+
+
 def _regenerate_after_resolution(result: dict) -> dict:
-    """Regenerate G-code deterministically after plan modifications."""
+    """Regenerate G-code deterministically after plan modifications.
+
+    Removes stale top-level warnings/errors that correspond to resolved
+    issues before calling the pipeline so that only warnings valid for
+    the *current* plan state survive.
+    """
+    from cnc.tools.issue_resolution import _RESOLVED_CLEANUP_PATTERNS
+
+    # Collect cleanup patterns for every resolved issue
+    resolved_pats: list = []
+    acknowledged_general_msgs: set[str] = set()
+    for entry in result.get("resolution_log", []):
+        action = entry.get("action", "")
+        if action not in ("ACKNOWLEDGED", "IGNORE_ONCE"):
+            code = entry.get("issue_code", "")
+            for p in _RESOLVED_CLEANUP_PATTERNS.get(code, []):
+                resolved_pats.append(p)
+        elif action == "ACKNOWLEDGED" and entry.get("issue_code") == "GENERAL_WARNING":
+            # Collect ACKNOWLEDGED general messages — they are ephemeral
+            # agent-generated messages that should not persist after
+            # the issues they describe are resolved.
+            msg = entry.get("message", "")
+            if msg:
+                acknowledged_general_msgs.add(msg)
+
+    def _is_stale(w: str) -> bool:
+        if resolved_pats and any(p.search(w) for p in resolved_pats):
+            return True
+        if w in acknowledged_general_msgs:
+            return True
+        return False
+
+    # Filter stale warnings; keep legitimate safety / informational ones
+    result["warnings"] = [
+        w for w in result.get("warnings", []) if not _is_stale(str(w))
+    ]
+    # Clear errors — the pipeline re-derives valid errors from the plan
+    result["errors"] = []
+
     try:
         from cnc.tools.gcode_pipeline import regenerate_gcode_from_operation_plan
         result = regenerate_gcode_from_operation_plan(result)

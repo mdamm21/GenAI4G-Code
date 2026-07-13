@@ -46,10 +46,17 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
         lines.append("(ASSUMPTIONS:)")
         for a in assumptions:
             lines.append(f"(  - {a})")
-    if warnings_plan:
-        lines.append("(PLAN WARNINGS:)")
-        for w in warnings_plan:
-            lines.append(f"(  ! {w})")
+    # Use consolidated_warnings if available (includes validation, safety,
+    # and acknowledged informational findings); fall back to plan-only warnings.
+    consolidated = operation_plan.get("consolidated_warnings")
+    header_warnings = consolidated if consolidated is not None else warnings_plan
+    if header_warnings:
+        lines.append("(WARNINGS:)")
+        seen: set[str] = set()
+        for w in header_warnings:
+            if w not in seen:
+                seen.add(w)
+                lines.append(f"(  ! {w})")
 
     # --- Safety setup ---
     lines.append("G17 G40 G49 G80 (SAFETY CANCEL: PLANE/COMP/TLO/CYCLE)")

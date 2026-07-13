@@ -196,6 +196,31 @@ def regenerate_gcode_from_operation_plan(
             return result
 
         # ------------------------------------------------------------------
+        # Fail-closed check: reject unsupported operation types before
+        # the postprocessor can silently emit TODO comments
+        # ------------------------------------------------------------------
+        from cnc.tools.validation_tools import _ALL_SUPPORTED_OP_TYPES
+
+        unsupported_ops: list[str] = []
+        for idx_op, _op in enumerate(op.get("operations", [])):
+            if isinstance(_op, dict):
+                _ot = _op.get("type", "")
+                if _ot and _ot not in _ALL_SUPPORTED_OP_TYPES:
+                    unsupported_ops.append(
+                        f"Unsupported operation type '{_ot}' in operation {idx_op}. "
+                        f"No G-code generated."
+                    )
+        if unsupported_ops:
+            result["gcode"] = ""
+            result["operation_plan"] = op
+            result["validation"] = plan_val
+            result["warnings"] = warnings + list(plan_val.get("warnings", []))
+            result["errors"] = errors + unsupported_ops
+            result["postprocessor"] = resolved_pp
+            result["ok"] = False
+            return result
+
+        # ------------------------------------------------------------------
         # Postprocess → deterministic G-code
         # ------------------------------------------------------------------
         from cnc.tools.postprocess_tools import postprocess_operations

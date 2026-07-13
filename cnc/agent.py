@@ -106,6 +106,9 @@ If the request requires any other operation, return missing_info explaining this
 - NEVER invent missing critical parameters silently. Critical parameters are:
     units, machine_type, safe_z, feedrate, spindle_speed, tool_diameter,
     depth, step_down, step_over, work_coordinate_system
+- feedrate and spindle_speed are OPERATOR-SUPPLIED values. If the user did NOT
+  provide them, they MUST be omitted from the OperationPlan. The downstream
+  system will ask the operator interactively. NEVER fill in defaults.
 - If critical data is missing, add it to missing_info and return no G-code.
 - NEVER accept or pass through freeform G-code from a subagent.
 - Always validate the OperationPlan before calling postprocess_operations.
@@ -229,6 +232,65 @@ _TOOLS: list[dict] = [
 
 
 # ---------------------------------------------------------------------------
+# Cutting-parameter guardrail
+# ---------------------------------------------------------------------------
+
+_FEEDRATE_PATTERN = re.compile(
+    r"(?:feedrate|feed[\s_-]?rate|vorschub)\s*[:=]?\s*\d+"
+    r"|\d+\s*(?:mm/?min)",
+    re.IGNORECASE,
+)
+_SPINDLE_PATTERN = re.compile(
+    r"(?:spindle|drehzahl)\s*[:=]?\s*\d+"
+    r"|\d+\s*rpm"
+    r"|rpm\s*[:=]?\s*\d+",
+    re.IGNORECASE,
+)
+
+
+def _strip_uninstructed_cutting_params(plan: dict, user_prompt: str) -> dict:
+    """Remove feedrate/spindle_speed from the plan if the user never specified them.
+
+    This is a hard guardrail against LLM hallucination of cutting parameters.
+    No matter what the subagent returns, if the original user prompt did not
+    contain an explicit feedrate or spindle_speed value, those fields are
+    stripped and a warning is added.
+    """
+    user_gave_feedrate = bool(_FEEDRATE_PATTERN.search(user_prompt))
+    user_gave_spindle = bool(_SPINDLE_PATTERN.search(user_prompt))
+
+    if user_gave_feedrate and user_gave_spindle:
+        return plan  # Nothing to strip
+
+    operations = plan.get("operations", [])
+    warnings = plan.setdefault("warnings", [])
+
+    for op in operations:
+        if not isinstance(op, dict):
+            continue
+        if not user_gave_feedrate:
+            removed = op.pop("feedrate_mmpm", None) or op.pop("feedrate", None)
+            if removed is not None:
+                # Also clean from parameters sub-dict if present
+                params = op.get("parameters", {})
+                params.pop("feedrate_mmpm", None)
+                params.pop("feedrate", None)
+        if not user_gave_spindle:
+            removed = op.pop("spindle_rpm", None) or op.pop("spindle_speed", None)
+            if removed is not None:
+                params = op.get("parameters", {})
+                params.pop("spindle_rpm", None)
+                params.pop("spindle_speed", None)
+
+    if not user_gave_feedrate and "Feedrate not specified by user." not in warnings:
+        warnings.append("Feedrate not specified by user.")
+    if not user_gave_spindle and "Spindle speed not specified by user." not in warnings:
+        warnings.append("Spindle speed not specified by user.")
+
+    return plan
+
+
+# ---------------------------------------------------------------------------
 # CNCAgent — full tool-use implementation
 # ---------------------------------------------------------------------------
 
@@ -254,6 +316,7 @@ class CNCAgent:
         self._client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
         self._model = os.environ.get("GENAI4G_MODEL", "claude-sonnet-4-6")
         self._max_turns = int(os.environ.get("GENAI4G_MAX_TURNS", "20"))
+        self._user_prompt: str = ""  # stored for cutting-param guardrails
 
     # ------------------------------------------------------------------
     # Tool dispatcher
@@ -333,6 +396,9 @@ class CNCAgent:
             # Unwrap if the subagent nested the plan under an extra key
             if "operation_plan" in plan and "operations" not in plan:
                 plan = plan["operation_plan"]
+            # Hard guardrail: strip feedrate/spindle_speed if the user
+            # did not explicitly provide them in the original prompt.
+            plan = _strip_uninstructed_cutting_params(plan, self._user_prompt)
             return plan
         except Exception as exc:  # noqa: BLE001
             return {"error": f"Subagent call failed: {exc}"}
@@ -349,6 +415,7 @@ class CNCAgent:
         """
         from cnc.tools.input_tools import extract_job_spec_from_text
 
+        self._user_prompt = user_message
         partial_spec = extract_job_spec_from_text(user_message)
         machine_type_hint = partial_spec.get("machine_type")
 

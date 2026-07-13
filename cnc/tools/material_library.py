@@ -6,9 +6,12 @@ It provides:
   - Informational notes about machining considerations
   - Warnings about risk categories (stainless steel, wood, plastic)
   - Supported operation types per material
+  - Reference cutting speeds (Vc) per category for *recommendations only*
 
 Feeding, speeds, step-down, and step-over are NEVER derived from this module.
 All machining parameters must be supplied explicitly by the operator.
+Reference cutting speeds are used solely to present informational suggestions
+that the operator must confirm or override.
 
 Public API:
     list_materials()         → list[dict]
@@ -20,6 +23,44 @@ Public API:
 from __future__ import annotations
 
 import copy
+import math
+
+# ---------------------------------------------------------------------------
+# Reference cutting speeds (Vc in m/min) for HSS tooling — informational only.
+# These are conservative starting points. Actual values depend on tool
+# coating, machine rigidity, coolant, and workpiece condition.
+# Keys are material *categories* (not individual material IDs).
+# Values are (Vc_low, Vc_high) ranges in m/min for drilling with HSS.
+# ---------------------------------------------------------------------------
+
+_REFERENCE_VC_HSS_DRILL: dict[str, tuple[float, float]] = {
+    "aluminum":        (60, 100),
+    "steel":           (20,  35),
+    "stainless_steel": (10,  20),
+    "brass":           (40,  70),
+    "plastic":         (30,  60),
+    "wood":            (50, 100),
+    "composite":       (20,  40),
+}
+
+# ---------------------------------------------------------------------------
+# Reference feed-per-revolution (mm/rev) for HSS drills — informational only.
+# Values are (f_low, f_high) conservative ranges.  Actual feed depends on
+# drill geometry, coating, coolant, depth/diameter ratio, and machine rigidity.
+# Keyed by material *category*.
+# Common rule of thumb: f ≈ 0.01 * D  (mm/rev), but varies by material.
+# ---------------------------------------------------------------------------
+
+_REFERENCE_FPR_HSS_DRILL: dict[str, tuple[float, float]] = {
+    #                      f_low   f_high   (mm/rev, for D ≈ 5-12 mm)
+    "aluminum":        (0.10, 0.25),
+    "steel":           (0.08, 0.18),
+    "stainless_steel": (0.05, 0.12),
+    "brass":           (0.10, 0.20),
+    "plastic":         (0.10, 0.20),
+    "wood":            (0.15, 0.30),
+    "composite":       (0.05, 0.15),
+}
 
 # ---------------------------------------------------------------------------
 # Built-in material registry
@@ -239,4 +280,142 @@ def normalize_material(material: str | None) -> dict:
         "material_id": None,
         "warnings": [f"Unknown material: {material_stripped!r}. Check spelling or use list_available_materials()."],
         "errors": [],
+    }
+
+
+def recommend_spindle_rpm(
+    material_id_or_category: str | None,
+    tool_diameter_mm: float | None,
+) -> dict:
+    """Return an informational RPM recommendation based on material and tool diameter.
+
+    Uses the simple formula: RPM = Vc * 1000 / (pi * D)
+    with conservative HSS reference cutting speeds.
+
+    This is a *suggestion only* — the operator must confirm or override.
+
+    Returns:
+        {
+            "ok":       bool,        # True if a recommendation could be computed
+            "rpm_low":  int | None,  # Lower bound
+            "rpm_high": int | None,  # Upper bound
+            "vc_low":   float | None,
+            "vc_high":  float | None,
+            "note":     str,         # Human-readable explanation
+        }
+    """
+    if not tool_diameter_mm or tool_diameter_mm <= 0:
+        return {"ok": False, "rpm_low": None, "rpm_high": None,
+                "vc_low": None, "vc_high": None,
+                "note": "Tool diameter unknown — cannot compute recommendation."}
+
+    # Resolve category
+    category: str | None = None
+    if material_id_or_category:
+        # Direct category match
+        if material_id_or_category in _REFERENCE_VC_HSS_DRILL:
+            category = material_id_or_category
+        else:
+            # Look up material entry to get its category
+            mat = get_material(material_id_or_category)
+            if mat:
+                category = mat.get("category")
+
+    if not category or category not in _REFERENCE_VC_HSS_DRILL:
+        return {"ok": False, "rpm_low": None, "rpm_high": None,
+                "vc_low": None, "vc_high": None,
+                "note": "Material category unknown — cannot compute recommendation."}
+
+    vc_low, vc_high = _REFERENCE_VC_HSS_DRILL[category]
+    rpm_low = int(vc_low * 1000 / (math.pi * tool_diameter_mm))
+    rpm_high = int(vc_high * 1000 / (math.pi * tool_diameter_mm))
+
+    return {
+        "ok": True,
+        "rpm_low": rpm_low,
+        "rpm_high": rpm_high,
+        "vc_low": vc_low,
+        "vc_high": vc_high,
+        "note": (
+            f"HSS drill D{tool_diameter_mm}mm in {category}: "
+            f"Vc {vc_low}-{vc_high} m/min = {rpm_low}-{rpm_high} RPM (reference only)"
+        ),
+    }
+
+
+def recommend_drill_feedrate(
+    material_id_or_category: str | None,
+    tool_diameter_mm: float | None,
+    spindle_rpm: float | None = None,
+) -> dict:
+    """Return an informational feedrate recommendation for drilling.
+
+    Uses: Feed (mm/min) = feed_per_rev (mm/rev) x RPM
+    If RPM is not known, uses the midpoint of the recommended RPM range.
+
+    This is a *suggestion only* -- the operator must confirm or override.
+
+    Returns:
+        {
+            "ok":           bool,
+            "feed_low":     int | None,    # mm/min lower bound
+            "feed_high":    int | None,    # mm/min upper bound
+            "fpr_low":      float | None,  # feed per rev low
+            "fpr_high":     float | None,  # feed per rev high
+            "rpm_used":     int | None,    # RPM used for calculation
+            "note":         str,
+        }
+    """
+    if not tool_diameter_mm or tool_diameter_mm <= 0:
+        return {"ok": False, "feed_low": None, "feed_high": None,
+                "fpr_low": None, "fpr_high": None, "rpm_used": None,
+                "note": "Tool diameter unknown -- cannot compute recommendation."}
+
+    # Resolve category
+    category: str | None = None
+    if material_id_or_category:
+        if material_id_or_category in _REFERENCE_FPR_HSS_DRILL:
+            category = material_id_or_category
+        else:
+            mat = get_material(material_id_or_category)
+            if mat:
+                category = mat.get("category")
+
+    if not category or category not in _REFERENCE_FPR_HSS_DRILL:
+        return {"ok": False, "feed_low": None, "feed_high": None,
+                "fpr_low": None, "fpr_high": None, "rpm_used": None,
+                "note": "Material category unknown -- cannot compute recommendation."}
+
+    fpr_low, fpr_high = _REFERENCE_FPR_HSS_DRILL[category]
+
+    # Determine RPM to use
+    rpm: float
+    if spindle_rpm and spindle_rpm > 0:
+        rpm = spindle_rpm
+    else:
+        # Use midpoint of recommended RPM range
+        rpm_rec = recommend_spindle_rpm(material_id_or_category, tool_diameter_mm)
+        if rpm_rec["ok"]:
+            rpm = (rpm_rec["rpm_low"] + rpm_rec["rpm_high"]) / 2
+        else:
+            return {"ok": False, "feed_low": None, "feed_high": None,
+                    "fpr_low": fpr_low, "fpr_high": fpr_high, "rpm_used": None,
+                    "note": "Cannot determine RPM -- feedrate calculation incomplete."}
+
+    rpm_int = int(rpm)
+    feed_low = int(fpr_low * rpm)
+    feed_high = int(fpr_high * rpm)
+
+    return {
+        "ok": True,
+        "feed_low": feed_low,
+        "feed_high": feed_high,
+        "fpr_low": fpr_low,
+        "fpr_high": fpr_high,
+        "rpm_used": rpm_int,
+        "note": (
+            f"HSS drill D{tool_diameter_mm}mm in {category} @ {rpm_int} RPM: "
+            f"f={fpr_low}-{fpr_high} mm/rev = {feed_low}-{feed_high} mm/min "
+            f"(reference only)"
+        ),
     }

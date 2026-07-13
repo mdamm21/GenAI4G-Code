@@ -16,6 +16,39 @@ import copy
 from typing import Any
 
 # ---------------------------------------------------------------------------
+# Metric ISO thread table — coarse pitch (DIN 13)
+# tap_drill_mm: core hole diameter for tapping
+# clearance_mm: medium-fit clearance hole (ISO 273 / DIN EN 20273)
+# ---------------------------------------------------------------------------
+
+_METRIC_THREAD_TABLE: dict[str, dict[str, float]] = {
+    "M3":  {"tap_drill_mm": 2.5,  "clearance_mm": 3.4},
+    "M4":  {"tap_drill_mm": 3.3,  "clearance_mm": 4.5},
+    "M5":  {"tap_drill_mm": 4.2,  "clearance_mm": 5.5},
+    "M6":  {"tap_drill_mm": 5.0,  "clearance_mm": 6.6},
+    "M8":  {"tap_drill_mm": 6.8,  "clearance_mm": 9.0},
+    "M10": {"tap_drill_mm": 8.5,  "clearance_mm": 11.0},
+    "M12": {"tap_drill_mm": 10.2, "clearance_mm": 13.5},
+    "M14": {"tap_drill_mm": 12.0, "clearance_mm": 15.5},
+    "M16": {"tap_drill_mm": 14.0, "clearance_mm": 17.5},
+    "M20": {"tap_drill_mm": 17.5, "clearance_mm": 22.0},
+}
+
+_BOLT_SIZE_PATTERN = re.compile(r"\bM(\d+)\b")
+
+
+def _detect_bolt_size(op: dict) -> str | None:
+    """Try to detect bolt size (e.g. 'M8') from tool descriptions."""
+    for t in op.get("tools", []):
+        if isinstance(t, dict):
+            desc = t.get("description", "")
+            m = _BOLT_SIZE_PATTERN.search(desc)
+            if m:
+                return f"M{m.group(1)}"
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Issue code constants
 # ---------------------------------------------------------------------------
 
@@ -28,8 +61,14 @@ MISSING_MATERIAL = "MISSING_MATERIAL"
 UNKNOWN_MATERIAL = "UNKNOWN_MATERIAL"
 
 MISSING_FEEDRATE = "MISSING_FEEDRATE"
+ASSUMED_FEEDRATE = "ASSUMED_FEEDRATE"
 MISSING_SPINDLE_SPEED = "MISSING_SPINDLE_SPEED"
 MISSING_SAFE_Z = "MISSING_SAFE_Z"
+
+MISSING_BOLT_CIRCLE_CENTER = "MISSING_BOLT_CIRCLE_CENTER"
+MISSING_BOLT_CIRCLE_START_ANGLE = "MISSING_BOLT_CIRCLE_START_ANGLE"
+MISSING_BOLT_CIRCLE_HOLE_TYPE = "MISSING_BOLT_CIRCLE_HOLE_TYPE"
+MISSING_Z_REFERENCE = "MISSING_Z_REFERENCE"
 
 RELATIVE_POSITIONING = "RELATIVE_POSITIONING"
 RELATIVE_NEGATIVE_Z = "RELATIVE_NEGATIVE_Z"
@@ -72,10 +111,19 @@ _MESSAGE_PATTERNS: list[tuple[re.Pattern[str], str, str, str, bool, bool]] = [
 
     (re.compile(r"missing.*feedrate|no feedrate|feedrate.*missing", re.I),
      MISSING_FEEDRATE, "parameter", "Missing feedrate", True, True),
+    (re.compile(r"feedrate.*(?:was |been )?assumed|assumed.*feedrate", re.I),
+     ASSUMED_FEEDRATE, "parameter", "Feedrate assumed by agent", True, True),
     (re.compile(r"no spindle_speed|spindle.*missing|missing.*spindle", re.I),
      MISSING_SPINDLE_SPEED, "parameter", "Missing spindle speed", True, False),
     (re.compile(r"Missing required field: safe_z", re.I),
      MISSING_SAFE_Z, "parameter", "Missing safe Z", True, True),
+
+    (re.compile(r"missing.*'center_[xy]'.*bolt circle|bolt circle center.*not specified", re.I),
+     MISSING_BOLT_CIRCLE_CENTER, "geometry", "Bolt circle center not specified", True, True),
+    (re.compile(r"missing.*'start_angle_deg'.*bolt circle|bolt circle start angle.*not specified", re.I),
+     MISSING_BOLT_CIRCLE_START_ANGLE, "geometry", "Bolt circle start angle not specified", True, True),
+    (re.compile(r"missing.*'hole_type'|hole type.*not specified", re.I),
+     MISSING_BOLT_CIRCLE_HOLE_TYPE, "geometry", "Hole type not specified", True, True),
 
     (re.compile(r"G91 relative positioning detected", re.I),
      RELATIVE_POSITIONING, "safety", "Relative positioning detected", False, False),
@@ -190,6 +238,259 @@ def _detect_assumed_defaults(result: dict, groups: dict[str, dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Bolt circle pattern detection
+# ---------------------------------------------------------------------------
+
+_BOLT_CIRCLE_NAME_PATTERN = re.compile(
+    r"bolt.?circle|lochkreis|\bat\s+\d+\s*deg", re.I,
+)
+
+
+def _detect_bolt_circle_params_from_ops(
+    operations: list[dict],
+) -> dict | None:
+    """Detect bolt circle geometry from drill operations.
+
+    Returns a dict with detected center, radius, start_angle, num_holes
+    if the operations look like a bolt circle pattern, or None.
+    """
+    import math
+
+    drill_ops = [
+        o for o in operations
+        if isinstance(o, dict) and o.get("type") == "drill"
+        and isinstance(o.get("parameters"), dict)
+        and "x" in o["parameters"] and "y" in o["parameters"]
+    ]
+
+    if len(drill_ops) < 3:
+        return None
+
+    # Check if operation names suggest a bolt circle
+    bc_named = sum(
+        1 for o in drill_ops
+        if _BOLT_CIRCLE_NAME_PATTERN.search(o.get("name", ""))
+    )
+    if bc_named < 2:
+        return None
+
+    # Extract positions
+    positions = [(o["parameters"]["x"], o["parameters"]["y"]) for o in drill_ops]
+    n = len(positions)
+
+    # Compute centroid
+    cx = sum(x for x, _ in positions) / n
+    cy = sum(y for _, y in positions) / n
+
+    # Compute radius from centroid to first hole
+    r = math.sqrt((positions[0][0] - cx) ** 2 + (positions[0][1] - cy) ** 2)
+    if r < 0.01:
+        return None
+
+    # Verify all holes are at approximately the same radius
+    for x, y in positions:
+        ri = math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+        if abs(ri - r) > 0.5:
+            return None
+
+    # Start angle of first hole
+    start_angle = math.degrees(
+        math.atan2(positions[0][1] - cy, positions[0][0] - cx)
+    )
+
+    return {
+        "center_x": round(cx, 3),
+        "center_y": round(cy, 3),
+        "radius": round(r, 3),
+        "num_holes": n,
+        "start_angle_deg": round(start_angle, 3),
+    }
+
+
+def _detect_undocumented_bolt_circle(
+    result: dict, groups: dict[str, dict],
+) -> None:
+    """Add issues for bolt circle patterns with undocumented assumptions.
+
+    If the plan contains drill operations arranged in a circular pattern
+    but the center point, start angle, or hole type were not explicitly
+    confirmed, create blocking HITL issues for each.
+    """
+    op = result.get("operation_plan", {})
+    if not isinstance(op, dict):
+        return
+
+    operations = op.get("operations", [])
+    detected = _detect_bolt_circle_params_from_ops(operations)
+    if detected is None:
+        return
+
+    assumptions = [str(a) for a in op.get("assumptions", [])]
+    resolution_log = result.get("resolution_log", [])
+    resolved_codes = {
+        e.get("issue_code")
+        for e in resolution_log
+        if e.get("action") not in ("ACKNOWLEDGED", "IGNORE_ONCE")
+    }
+
+    # Only assumptions that start with "Confirmed" count as user-confirmed.
+    # Agent-generated assumptions like "Bolt circle center at X0/Y0" are
+    # NOT confirmations — they are exactly what we need the user to confirm.
+    confirmed = [a for a in assumptions if a.lower().startswith("confirmed")]
+
+    n_ops = len(operations)
+
+    # Center
+    center_confirmed = (
+        any("center" in a.lower() for a in confirmed)
+        or MISSING_BOLT_CIRCLE_CENTER in resolved_codes
+    )
+    if not center_confirmed and MISSING_BOLT_CIRCLE_CENTER not in groups:
+        groups[MISSING_BOLT_CIRCLE_CENTER] = {
+            "id": f"issue_{len(groups)}",
+            "code": MISSING_BOLT_CIRCLE_CENTER,
+            "severity": "warning",
+            "category": "geometry",
+            "title": "Bolt circle center not confirmed",
+            "message": (
+                f"Bolt circle center not specified by user. "
+                f"Plan uses X{detected['center_x']} / Y{detected['center_y']} "
+                f"— confirm or enter manually."
+            ),
+            "actionable": True,
+            "blocking": True,
+            "source_messages": [
+                "Bolt circle center assumed without operator confirmation."
+            ],
+            "affected_operations": list(range(n_ops)),
+            "context": {
+                "detected_center_x": detected["center_x"],
+                "detected_center_y": detected["center_y"],
+                "bolt_circle_params": detected,
+            },
+            "choices": [],
+        }
+
+    # Start angle
+    angle_confirmed = (
+        any("start" in a.lower() and "angle" in a.lower() for a in confirmed)
+        or MISSING_BOLT_CIRCLE_START_ANGLE in resolved_codes
+    )
+    if not angle_confirmed and MISSING_BOLT_CIRCLE_START_ANGLE not in groups:
+        groups[MISSING_BOLT_CIRCLE_START_ANGLE] = {
+            "id": f"issue_{len(groups)}",
+            "code": MISSING_BOLT_CIRCLE_START_ANGLE,
+            "severity": "warning",
+            "category": "geometry",
+            "title": "Bolt circle start angle not confirmed",
+            "message": (
+                f"Bolt circle start angle not specified by user. "
+                f"Plan uses {detected['start_angle_deg']}° "
+                f"— confirm or enter manually."
+            ),
+            "actionable": True,
+            "blocking": True,
+            "source_messages": [
+                "Bolt circle start angle assumed without operator confirmation."
+            ],
+            "affected_operations": list(range(n_ops)),
+            "context": {
+                "detected_start_angle_deg": detected["start_angle_deg"],
+                "bolt_circle_params": detected,
+            },
+            "choices": [],
+        }
+
+    # Hole type
+    hole_type_confirmed = (
+        any("hole" in a.lower() and ("type" in a.lower() or "purpose" in a.lower())
+            for a in confirmed)
+        or MISSING_BOLT_CIRCLE_HOLE_TYPE in resolved_codes
+    )
+    if not hole_type_confirmed and MISSING_BOLT_CIRCLE_HOLE_TYPE not in groups:
+        groups[MISSING_BOLT_CIRCLE_HOLE_TYPE] = {
+            "id": f"issue_{len(groups)}",
+            "code": MISSING_BOLT_CIRCLE_HOLE_TYPE,
+            "severity": "warning",
+            "category": "geometry",
+            "title": "Hole type not specified",
+            "message": (
+                "Hole type not specified for bolt circle. "
+                "This determines the correct drill diameter."
+            ),
+            "actionable": True,
+            "blocking": True,
+            "source_messages": [
+                "Hole type not specified for bolt circle."
+            ],
+            "affected_operations": list(range(n_ops)),
+            "context": {"bolt_circle_params": detected},
+            "choices": [],
+        }
+
+    # Z reference — applies to any plan with negative-Z drill targets
+    _detect_unconfirmed_z_reference(op, result, resolved_codes, confirmed,
+                                     operations, groups)
+
+
+def _detect_unconfirmed_z_reference(
+    op: dict,
+    result: dict,
+    resolved_codes: set,
+    confirmed: list[str],
+    operations: list[dict],
+    groups: dict[str, dict],
+) -> None:
+    """Add issue for unconfirmed Z0 workpiece reference."""
+    if MISSING_Z_REFERENCE in resolved_codes:
+        return
+    if MISSING_Z_REFERENCE in groups:
+        return
+    if any("z" in a.lower() and "reference" in a.lower() for a in confirmed):
+        return
+    if any("z0" in a.lower() and "confirmed" in a.lower() for a in confirmed):
+        return
+
+    # Only trigger if there are drill operations with negative Z targets
+    has_negative_z = any(
+        isinstance(o, dict) and o.get("type") == "drill"
+        and isinstance(o.get("parameters"), dict)
+        and (o["parameters"].get("z", 0) < 0)
+        for o in operations
+    )
+    if not has_negative_z:
+        return
+
+    # Find the target Z from first drill op for display
+    first_z = None
+    for o in operations:
+        if isinstance(o, dict) and o.get("type") == "drill":
+            first_z = o.get("parameters", {}).get("z")
+            if first_z is not None:
+                break
+
+    groups[MISSING_Z_REFERENCE] = {
+        "id": f"issue_{len(groups)}",
+        "code": MISSING_Z_REFERENCE,
+        "severity": "warning",
+        "category": "geometry",
+        "title": "Workpiece Z reference not confirmed",
+        "message": (
+            f"Plan assumes Z0 at top of workpiece (target Z = {first_z}). "
+            f"Confirm or specify another Z reference."
+        ),
+        "actionable": True,
+        "blocking": True,
+        "source_messages": [
+            "Z0 workpiece reference assumed without operator confirmation."
+        ],
+        "affected_operations": list(range(len(operations))),
+        "context": {"detected_target_z": first_z},
+        "choices": [],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Collect and deduplicate
 # ---------------------------------------------------------------------------
 
@@ -279,7 +580,9 @@ def collect_interactive_issues(
 
     if not messages:
         # No warning messages, but may still have assumed defaults
+        # or undocumented bolt circle assumptions
         _detect_assumed_defaults(result, groups)
+        _detect_undocumented_bolt_circle(result, groups)
         issues = list(groups.values())
         for idx, issue in enumerate(issues):
             issue["id"] = f"issue_{idx}"
@@ -294,7 +597,12 @@ def collect_interactive_issues(
         if code == UNKNOWN_TOOL_ID and tool_id:
             group_key = f"{code}:{tool_id}"
         elif code in (MISSING_MATERIAL, MISSING_SAFE_Z, AGENT_GCODE_DISCARDED,
-                      RELATIVE_POSITIONING, RELATIVE_NEGATIVE_Z):
+                      RELATIVE_POSITIONING, RELATIVE_NEGATIVE_Z,
+                      MISSING_SPINDLE_SPEED, MISSING_FEEDRATE,
+                      ASSUMED_FEEDRATE,
+                      MISSING_BOLT_CIRCLE_CENTER,
+                      MISSING_BOLT_CIRCLE_START_ANGLE,
+                      MISSING_BOLT_CIRCLE_HOLE_TYPE):
             group_key = code
         else:
             # Use the full message as key for non-groupable issues
@@ -311,16 +619,30 @@ def collect_interactive_issues(
                 context["tool_id"] = tool_id
 
             issue_message = msg
-            # For grouped tool warnings, create a cleaner message
+            issue_title = title
+            # For grouped warnings, create a cleaner message
             if code == UNKNOWN_TOOL_ID and tool_id:
                 issue_message = f"tool_id='{tool_id}' is not in the built-in tool library."
+            elif code == MISSING_SPINDLE_SPEED:
+                issue_message = (
+                    "No spindle_speed/spindle_rpm specified. "
+                    "Spindle start (M03) will be skipped."
+                )
+            elif code == MISSING_FEEDRATE:
+                issue_message = "No feedrate specified for operation(s)."
+            elif code == MISSING_MATERIAL:
+                issue_title = "Material grade not specified"
+                issue_message = (
+                    "No confirmed material grade. "
+                    "Specify a material for guardrail checks and documentation."
+                )
 
             groups[group_key] = {
                 "id": f"issue_{len(groups)}",
                 "code": code,
                 "severity": effective_severity,
                 "category": category,
-                "title": title,
+                "title": issue_title,
                 "message": issue_message,
                 "actionable": actionable,
                 "blocking": blocking,
@@ -343,10 +665,23 @@ def collect_interactive_issues(
     # --- Phase 2: Detect assumed defaults from assumptions list ---
     _detect_assumed_defaults(result, groups)
 
-    # Sort: errors first, then actionable warnings, then info
+    # --- Phase 3: Detect undocumented bolt circle assumptions ---
+    _detect_undocumented_bolt_circle(result, groups)
+
+    # Sort: errors first, then actionable by category
+    # (geometry/defaults before cutting parameters), then info.
+    # Within actionable: postprocessor → geometry → material → parameters
+    _CATEGORY_ORDER = {
+        "defaults": 0,   # postprocessor, units, WCS
+        "geometry": 1,   # bolt circle center, angle, hole type, Z ref
+        "material": 2,
+        "tool": 3,
+        "parameter": 4,  # feedrate, spindle speed
+    }
     issues = list(groups.values())
     issues.sort(key=lambda i: (
         0 if i["severity"] == "error" else 1 if i["actionable"] else 2,
+        _CATEGORY_ORDER.get(i.get("category", ""), 5),
         i["code"],
     ))
 
@@ -383,10 +718,20 @@ def build_issue_choices(
         choices = _build_missing_material_choices(issue, result, prompt)
     elif code == MISSING_FEEDRATE:
         choices = _build_missing_feedrate_choices(issue, result)
+    elif code == ASSUMED_FEEDRATE:
+        choices = _build_assumed_feedrate_choices(issue, result)
     elif code == MISSING_SPINDLE_SPEED:
         choices = _build_missing_spindle_choices(issue, result)
     elif code == MISSING_SAFE_Z:
         choices = _build_missing_safe_z_choices(issue, result)
+    elif code == MISSING_BOLT_CIRCLE_CENTER:
+        choices = _build_missing_bolt_circle_center_choices(issue, result)
+    elif code == MISSING_BOLT_CIRCLE_START_ANGLE:
+        choices = _build_missing_bolt_circle_start_angle_choices(issue, result)
+    elif code == MISSING_BOLT_CIRCLE_HOLE_TYPE:
+        choices = _build_missing_bolt_circle_hole_type_choices(issue, result)
+    elif code == MISSING_Z_REFERENCE:
+        choices = _build_missing_z_reference_choices(issue, result)
     elif code == TOOL_DIAMETER_MISMATCH:
         choices = _build_diameter_mismatch_choices(issue, result)
     elif code == ASSUMED_POSTPROCESSOR:
@@ -559,27 +904,231 @@ def _build_missing_material_choices(
 
 
 def _build_missing_feedrate_choices(issue: dict, result: dict) -> list[dict]:
-    return [
-        {"key": "1", "label": "Enter feedrate manually",
-         "action": "SET_FEEDRATE", "payload": {}},
-        {"key": "2", "label": "Ignore and keep job blocked",
-         "action": "IGNORE_ONCE", "payload": {}},
-        {"key": "3", "label": "Abort",
-         "action": "ABORT", "payload": {}},
-    ]
+    rec = _feedrate_recommendation(issue, result)
+
+    choices: list[dict] = []
+    if rec and rec.get("ok"):
+        mid = (rec["feed_low"] + rec["feed_high"]) // 2
+        choices.append({
+            "key": "1",
+            "label": f"Use recommended {mid} mm/min ({rec['note']})",
+            "action": "SET_FEEDRATE",
+            "payload": {"feedrate": mid},
+        })
+        choices.append({
+            "key": "2", "label": "Enter feedrate manually",
+            "action": "SET_FEEDRATE", "payload": {},
+        })
+        choices.append({
+            "key": "3", "label": "Abort",
+            "action": "ABORT", "payload": {},
+        })
+    else:
+        choices.append({
+            "key": "1", "label": "Enter feedrate manually",
+            "action": "SET_FEEDRATE", "payload": {},
+        })
+        choices.append({
+            "key": "2", "label": "Ignore and keep job blocked",
+            "action": "IGNORE_ONCE", "payload": {},
+        })
+        choices.append({
+            "key": "3", "label": "Abort",
+            "action": "ABORT", "payload": {},
+        })
+
+    return choices
 
 
 def _build_missing_spindle_choices(issue: dict, result: dict) -> list[dict]:
-    return [
-        {"key": "1", "label": "Enter spindle speed manually",
-         "action": "SET_SPINDLE_SPEED", "payload": {}},
-        {"key": "2", "label": "Continue without spindle start if supported",
-         "action": "IGNORE_ONCE", "payload": {}},
-        {"key": "3", "label": "Ignore for this run",
-         "action": "IGNORE_ONCE", "payload": {}},
-        {"key": "4", "label": "Abort",
-         "action": "ABORT", "payload": {}},
-    ]
+    # Try to compute a recommendation from material + tool diameter
+    rec = _spindle_recommendation(issue, result)
+
+    choices: list[dict] = []
+    if rec and rec.get("ok"):
+        mid = (rec["rpm_low"] + rec["rpm_high"]) // 2
+        choices.append({
+            "key": "1",
+            "label": f"Use recommended {mid} RPM ({rec['note']})",
+            "action": "SET_SPINDLE_SPEED",
+            "payload": {"spindle_speed": mid},
+        })
+        choices.append({
+            "key": "2", "label": "Enter spindle speed manually",
+            "action": "SET_SPINDLE_SPEED", "payload": {},
+        })
+        choices.append({
+            "key": "3", "label": "Continue without spindle start if supported",
+            "action": "IGNORE_ONCE", "payload": {},
+        })
+        choices.append({
+            "key": "4", "label": "Abort",
+            "action": "ABORT", "payload": {},
+        })
+    else:
+        choices.append({
+            "key": "1", "label": "Enter spindle speed manually",
+            "action": "SET_SPINDLE_SPEED", "payload": {},
+        })
+        choices.append({
+            "key": "2", "label": "Continue without spindle start if supported",
+            "action": "IGNORE_ONCE", "payload": {},
+        })
+        choices.append({
+            "key": "3", "label": "Ignore for this run",
+            "action": "IGNORE_ONCE", "payload": {},
+        })
+        choices.append({
+            "key": "4", "label": "Abort",
+            "action": "ABORT", "payload": {},
+        })
+
+    return choices
+
+
+def _spindle_recommendation(issue: dict, result: dict) -> dict | None:
+    """Try to compute an RPM recommendation from the result's material and tool diameter."""
+    try:
+        from cnc.tools.material_library import recommend_spindle_rpm
+    except ImportError:
+        return None
+
+    # Find material category
+    op_plan = result.get("operation_plan", {})
+    material_id = op_plan.get("material") or result.get("material")
+
+    # Find tool diameter from affected operations or tools list
+    diameter: float | None = None
+    operations = op_plan.get("operations", [])
+    affected = issue.get("affected_operations", [])
+
+    # Check affected operations for diameter info
+    for idx in affected:
+        if 0 <= idx < len(operations):
+            op = operations[idx]
+            d = op.get("tool_diameter") or op.get("parameters", {}).get("tool_diameter")
+            if d:
+                diameter = float(d)
+                break
+
+    # Fallback: check tools list
+    if diameter is None:
+        for t in op_plan.get("tools", []):
+            d = t.get("diameter_mm") or t.get("diameter")
+            if d:
+                diameter = float(d)
+                break
+
+    return recommend_spindle_rpm(material_id, diameter)
+
+
+def _build_assumed_feedrate_choices(issue: dict, result: dict) -> list[dict]:
+    """Choices for when the agent assumed/invented a feedrate."""
+    rec = _feedrate_recommendation(issue, result)
+
+    # Find what the agent assumed
+    agent_feedrate: float | None = None
+    op_plan = result.get("operation_plan", {})
+    operations = op_plan.get("operations", [])
+    affected = issue.get("affected_operations", [])
+    for idx in (affected or range(len(operations))):
+        if 0 <= idx < len(operations):
+            op = operations[idx]
+            f = op.get("feedrate_mmpm") or op.get("feedrate")
+            if f:
+                agent_feedrate = float(f)
+                break
+
+    choices: list[dict] = []
+
+    if rec and rec.get("ok"):
+        mid = (rec["feed_low"] + rec["feed_high"]) // 2
+        choices.append({
+            "key": "1",
+            "label": f"Use recommended {mid} mm/min ({rec['note']})",
+            "action": "SET_FEEDRATE",
+            "payload": {"feedrate": mid},
+        })
+        key = "2"
+        if agent_feedrate:
+            choices.append({
+                "key": key,
+                "label": f"Keep agent-assumed {int(agent_feedrate)} mm/min",
+                "action": "IGNORE_ONCE",
+                "payload": {},
+            })
+            key = "3"
+        choices.append({
+            "key": key, "label": "Enter feedrate manually",
+            "action": "SET_FEEDRATE", "payload": {},
+        })
+        choices.append({
+            "key": str(int(key) + 1), "label": "Abort",
+            "action": "ABORT", "payload": {},
+        })
+    else:
+        key_n = 1
+        if agent_feedrate:
+            choices.append({
+                "key": str(key_n),
+                "label": f"Keep agent-assumed {int(agent_feedrate)} mm/min",
+                "action": "IGNORE_ONCE", "payload": {},
+            })
+            key_n += 1
+        choices.append({
+            "key": str(key_n), "label": "Enter feedrate manually",
+            "action": "SET_FEEDRATE", "payload": {},
+        })
+        key_n += 1
+        choices.append({
+            "key": str(key_n), "label": "Abort",
+            "action": "ABORT", "payload": {},
+        })
+
+    return choices
+
+
+def _feedrate_recommendation(issue: dict, result: dict) -> dict | None:
+    """Try to compute a feedrate recommendation from material, tool diameter, and RPM."""
+    try:
+        from cnc.tools.material_library import recommend_drill_feedrate
+    except ImportError:
+        return None
+
+    op_plan = result.get("operation_plan", {})
+    material_id = op_plan.get("material") or result.get("material")
+
+    # Find tool diameter
+    diameter: float | None = None
+    operations = op_plan.get("operations", [])
+    affected = issue.get("affected_operations", [])
+
+    for idx in affected:
+        if 0 <= idx < len(operations):
+            op = operations[idx]
+            d = op.get("tool_diameter") or op.get("parameters", {}).get("tool_diameter")
+            if d:
+                diameter = float(d)
+                break
+
+    if diameter is None:
+        for t in op_plan.get("tools", []):
+            d = t.get("diameter_mm") or t.get("diameter")
+            if d:
+                diameter = float(d)
+                break
+
+    # Check if spindle RPM is already set on any affected operation
+    spindle_rpm: float | None = None
+    for idx in affected:
+        if 0 <= idx < len(operations):
+            op = operations[idx]
+            rpm = op.get("spindle_rpm") or op.get("spindle_speed")
+            if rpm:
+                spindle_rpm = float(rpm)
+                break
+
+    return recommend_drill_feedrate(material_id, diameter, spindle_rpm)
 
 
 def _build_missing_safe_z_choices(issue: dict, result: dict) -> list[dict]:
@@ -613,6 +1162,135 @@ def _build_missing_safe_z_choices(issue: dict, result: dict) -> list[dict]:
     })
 
     return choices
+
+
+def _build_missing_bolt_circle_center_choices(
+    issue: dict, result: dict,
+) -> list[dict]:
+    """Build choices for MISSING_BOLT_CIRCLE_CENTER."""
+    # If a default center was detected, offer confirmation
+    ctx = issue.get("context", {})
+    detected_cx = ctx.get("detected_center_x")
+    detected_cy = ctx.get("detected_center_y")
+
+    choices: list[dict] = []
+    if detected_cx is not None and detected_cy is not None:
+        choices.append({
+            "key": "1",
+            "label": f"Use X{detected_cx} / Y{detected_cy} (detected from plan)",
+            "action": "CONFIRM_BOLT_CIRCLE_CENTER",
+            "payload": {"center_x": detected_cx, "center_y": detected_cy},
+        })
+        choices.append({
+            "key": "2", "label": "Enter bolt circle center (X, Y)",
+            "action": "SET_BOLT_CIRCLE_CENTER", "payload": {},
+        })
+        choices.append({
+            "key": "3", "label": "Abort",
+            "action": "ABORT", "payload": {},
+        })
+    else:
+        choices.append({
+            "key": "1", "label": "Enter bolt circle center (X, Y)",
+            "action": "SET_BOLT_CIRCLE_CENTER", "payload": {},
+        })
+        choices.append({
+            "key": "2", "label": "Abort",
+            "action": "ABORT", "payload": {},
+        })
+    return choices
+
+
+def _build_missing_bolt_circle_start_angle_choices(
+    issue: dict, result: dict,
+) -> list[dict]:
+    """Build choices for MISSING_BOLT_CIRCLE_START_ANGLE."""
+    ctx = issue.get("context", {})
+    detected_angle = ctx.get("detected_start_angle_deg")
+
+    choices: list[dict] = []
+    if detected_angle is not None:
+        choices.append({
+            "key": "1",
+            "label": f"Use {detected_angle}° (detected from plan)",
+            "action": "CONFIRM_BOLT_CIRCLE_START_ANGLE",
+            "payload": {"start_angle_deg": detected_angle},
+        })
+        choices.append({
+            "key": "2", "label": "Enter start angle (degrees)",
+            "action": "SET_BOLT_CIRCLE_START_ANGLE", "payload": {},
+        })
+        choices.append({
+            "key": "3", "label": "Abort",
+            "action": "ABORT", "payload": {},
+        })
+    else:
+        choices.append({
+            "key": "1", "label": "Enter start angle (degrees)",
+            "action": "SET_BOLT_CIRCLE_START_ANGLE", "payload": {},
+        })
+        choices.append({
+            "key": "2", "label": "Abort",
+            "action": "ABORT", "payload": {},
+        })
+    return choices
+
+
+def _build_missing_bolt_circle_hole_type_choices(
+    issue: dict, result: dict,
+) -> list[dict]:
+    """Build choices for MISSING_BOLT_CIRCLE_HOLE_TYPE."""
+    op = result.get("operation_plan", {})
+    bolt_size = _detect_bolt_size(op) if isinstance(op, dict) else None
+    thread = _METRIC_THREAD_TABLE.get(bolt_size or "") if bolt_size else None
+
+    if thread and bolt_size:
+        cl_d = thread["clearance_mm"]
+        td_d = thread["tap_drill_mm"]
+        return [
+            {"key": "1",
+             "label": f"Clearance hole for {bolt_size} bolt (D{cl_d}mm)",
+             "action": "SET_BOLT_CIRCLE_HOLE_TYPE",
+             "payload": {"hole_type": "clearance", "bolt_size": bolt_size,
+                         "diameter_mm": cl_d}},
+            {"key": "2",
+             "label": f"{bolt_size} tap-drill / core hole (D{td_d}mm)",
+             "action": "SET_BOLT_CIRCLE_HOLE_TYPE",
+             "payload": {"hole_type": "tap_drill", "bolt_size": bolt_size,
+                         "diameter_mm": td_d}},
+            {"key": "3", "label": "Enter custom diameter",
+             "action": "SET_CUSTOM_DIAMETER", "payload": {}},
+            {"key": "4", "label": "Abort",
+             "action": "ABORT", "payload": {}},
+        ]
+    else:
+        return [
+            {"key": "1", "label": "Clearance hole (Durchgangsbohrung)",
+             "action": "SET_BOLT_CIRCLE_HOLE_TYPE",
+             "payload": {"hole_type": "clearance"}},
+            {"key": "2", "label": "Tap-drill / core hole (Kernloch)",
+             "action": "SET_BOLT_CIRCLE_HOLE_TYPE",
+             "payload": {"hole_type": "tap_drill"}},
+            {"key": "3", "label": "Enter custom diameter",
+             "action": "SET_CUSTOM_DIAMETER", "payload": {}},
+            {"key": "4", "label": "Abort",
+             "action": "ABORT", "payload": {}},
+        ]
+
+
+def _build_missing_z_reference_choices(
+    issue: dict, result: dict,
+) -> list[dict]:
+    """Build choices for MISSING_Z_REFERENCE."""
+    target_z = issue.get("context", {}).get("detected_target_z", "?")
+    return [
+        {"key": "1",
+         "label": f"Z0 at top of workpiece (target Z = {target_z})",
+         "action": "CONFIRM_Z_REFERENCE",
+         "payload": {"z_reference": "top_of_workpiece"}},
+        {"key": "2", "label": "Abort",
+         "action": "ABORT", "payload": {}},
+    ]
 
 
 def _build_diameter_mismatch_choices(issue: dict, result: dict) -> list[dict]:
@@ -829,6 +1507,50 @@ def apply_resolution_decision(
         if diameter is not None:
             _apply_diameter(op, issue, float(diameter), log_entry)
 
+    elif action == "CONFIRM_BOLT_CIRCLE_CENTER":
+        cx = decision.get("payload", {}).get("center_x")
+        cy = decision.get("payload", {}).get("center_y")
+        log_entry["before"] = {"center_x": cx, "center_y": cy}
+        log_entry["after"] = {"center_x": cx, "center_y": cy, "confirmed": True}
+        op.setdefault("assumptions", []).append(
+            f"Confirmed bolt circle center: X{cx} / Y{cy}"
+        )
+
+    elif action == "SET_BOLT_CIRCLE_CENTER":
+        cx = decision.get("payload", {}).get("center_x")
+        cy = decision.get("payload", {}).get("center_y")
+        if cx is not None and cy is not None:
+            _recalculate_bolt_circle(op, issue, log_entry,
+                                     new_center_x=float(cx), new_center_y=float(cy))
+
+    elif action == "CONFIRM_BOLT_CIRCLE_START_ANGLE":
+        angle = decision.get("payload", {}).get("start_angle_deg")
+        log_entry["before"] = {"start_angle_deg": angle}
+        log_entry["after"] = {"start_angle_deg": angle, "confirmed": True}
+        op.setdefault("assumptions", []).append(
+            f"Confirmed bolt circle start angle: {angle}°"
+        )
+
+    elif action == "SET_BOLT_CIRCLE_START_ANGLE":
+        angle = decision.get("payload", {}).get("start_angle_deg")
+        if angle is not None:
+            _recalculate_bolt_circle(op, issue, log_entry,
+                                     new_start_angle_deg=float(angle))
+
+    elif action == "SET_BOLT_CIRCLE_HOLE_TYPE":
+        hole_type = decision.get("payload", {}).get("hole_type")
+        if hole_type:
+            _apply_hole_purpose(op, hole_type, decision.get("payload", {}),
+                                log_entry)
+
+    elif action == "CONFIRM_Z_REFERENCE":
+        z_ref = decision.get("payload", {}).get("z_reference", "top_of_workpiece")
+        log_entry["before"] = {"z_reference": None}
+        log_entry["after"] = {"z_reference": z_ref, "confirmed": True}
+        op.setdefault("assumptions", []).append(
+            f"Confirmed Z reference: Z0 at {z_ref.replace('_', ' ')}"
+        )
+
     elif action == "SET_POSTPROCESSOR":
         pp = decision.get("payload", {}).get("postprocessor", "fanuc")
         log_entry["before"] = {"postprocessor": result.get("postprocessor")}
@@ -863,7 +1585,69 @@ def apply_resolution_decision(
     result["operation_plan"] = op
     result["resolution_log"].append(log_entry)
 
+    # Clean up missing_info and warnings that are no longer accurate
+    if action not in ("IGNORE_ONCE", "ABORT"):
+        _cleanup_resolved_plan_state(op, issue)
+
     return result
+
+
+# Issue code → patterns to remove from missing_info and warnings after resolution
+_RESOLVED_CLEANUP_PATTERNS: dict[str, list[re.Pattern[str]]] = {
+    MISSING_FEEDRATE: [
+        re.compile(r"feedrate", re.I),
+    ],
+    ASSUMED_FEEDRATE: [
+        re.compile(r"feedrate.*assumed|assumed.*feedrate", re.I),
+    ],
+    MISSING_SPINDLE_SPEED: [
+        re.compile(r"spindle", re.I),
+    ],
+    MISSING_SAFE_Z: [
+        re.compile(r"safe.?z", re.I),
+    ],
+    MISSING_MATERIAL: [
+        re.compile(r"material", re.I),
+    ],
+    UNKNOWN_MATERIAL: [
+        re.compile(r"material", re.I),
+    ],
+    MISSING_BOLT_CIRCLE_CENTER: [
+        re.compile(r"bolt circle center|center_[xy]", re.I),
+    ],
+    MISSING_BOLT_CIRCLE_START_ANGLE: [
+        re.compile(r"start.?angle|start_angle_deg", re.I),
+    ],
+    MISSING_BOLT_CIRCLE_HOLE_TYPE: [
+        re.compile(r"hole.?type", re.I),
+    ],
+}
+
+
+def _cleanup_resolved_plan_state(op: dict, issue: dict) -> None:
+    """Remove stale missing_info and warnings entries after a resolution.
+
+    When an issue is resolved (e.g. feedrate set by operator), the original
+    warning/missing_info strings that triggered the issue must be removed
+    from the plan so that re-validation does not flag them again.
+    """
+    code = issue.get("code", "")
+    patterns = _RESOLVED_CLEANUP_PATTERNS.get(code)
+    if not patterns:
+        return
+
+    def _matches(text: str) -> bool:
+        return any(p.search(text) for p in patterns)
+
+    # Clean missing_info
+    mi = op.get("missing_info")
+    if isinstance(mi, list):
+        op["missing_info"] = [entry for entry in mi if not _matches(str(entry))]
+
+    # Clean warnings
+    ws = op.get("warnings")
+    if isinstance(ws, list):
+        op["warnings"] = [w for w in ws if not _matches(str(w))]
 
 
 def _apply_library_tool(op: dict, issue: dict, tool_id: str, log_entry: dict) -> None:
@@ -955,7 +1739,7 @@ def _apply_entered_tool_id(op: dict, issue: dict, tool_id: str, log_entry: dict)
 
 
 def _apply_feedrate(op: dict, issue: dict, feedrate: float, log_entry: dict) -> None:
-    """Set feedrate on affected operations."""
+    """Set feedrate on affected operations (canonical field only)."""
     affected = issue.get("affected_operations", [])
     operations = op.get("operations", [])
     before_values = {}
@@ -963,20 +1747,20 @@ def _apply_feedrate(op: dict, issue: dict, feedrate: float, log_entry: dict) -> 
         if 0 <= idx < len(operations) and isinstance(operations[idx], dict):
             before_values[idx] = operations[idx].get("feedrate_mmpm") or operations[idx].get("feedrate")
             operations[idx]["feedrate_mmpm"] = feedrate
-            operations[idx]["feedrate"] = feedrate
-    # If no specific operations affected, apply to all
+            operations[idx].pop("feedrate", None)  # remove deprecated alias
+    # If no specific operations affected, apply to all that lack canonical feedrate
     if not affected:
         for i, o in enumerate(operations):
-            if isinstance(o, dict) and not o.get("feedrate_mmpm") and not o.get("feedrate"):
-                before_values[i] = None
+            if isinstance(o, dict) and not o.get("feedrate_mmpm"):
+                before_values[i] = o.get("feedrate")
                 o["feedrate_mmpm"] = feedrate
-                o["feedrate"] = feedrate
+                o.pop("feedrate", None)
     log_entry["before"] = {"feedrates": before_values}
-    log_entry["after"] = {"feedrate": feedrate}
+    log_entry["after"] = {"feedrate_mmpm": feedrate}
 
 
 def _apply_spindle_speed(op: dict, issue: dict, rpm: float, log_entry: dict) -> None:
-    """Set spindle speed on affected operations."""
+    """Set spindle speed on affected operations (canonical field only)."""
     affected = issue.get("affected_operations", [])
     operations = op.get("operations", [])
     before_values = {}
@@ -984,19 +1768,19 @@ def _apply_spindle_speed(op: dict, issue: dict, rpm: float, log_entry: dict) -> 
         if 0 <= idx < len(operations) and isinstance(operations[idx], dict):
             before_values[idx] = operations[idx].get("spindle_rpm") or operations[idx].get("spindle_speed")
             operations[idx]["spindle_rpm"] = int(rpm)
-            operations[idx]["spindle_speed"] = int(rpm)
+            operations[idx].pop("spindle_speed", None)  # remove deprecated alias
     if not affected:
         for i, o in enumerate(operations):
-            if isinstance(o, dict) and not o.get("spindle_rpm") and not o.get("spindle_speed"):
-                before_values[i] = None
+            if isinstance(o, dict) and not o.get("spindle_rpm"):
+                before_values[i] = o.get("spindle_speed")
                 o["spindle_rpm"] = int(rpm)
-                o["spindle_speed"] = int(rpm)
+                o.pop("spindle_speed", None)
     log_entry["before"] = {"spindle_speeds": before_values}
-    log_entry["after"] = {"spindle_speed": int(rpm)}
+    log_entry["after"] = {"spindle_rpm": int(rpm)}
 
 
 def _apply_diameter(op: dict, issue: dict, diameter: float, log_entry: dict) -> None:
-    """Set tool diameter on affected tools and operations."""
+    """Set tool diameter on affected tools and operations (canonical field only)."""
     affected = issue.get("affected_operations", [])
     ctx_tool_id = issue.get("context", {}).get("tool_id", "")
 
@@ -1009,7 +1793,7 @@ def _apply_diameter(op: dict, issue: dict, diameter: float, log_entry: dict) -> 
             if tid == ctx_tool_id:
                 log_entry["before"]["tool_diameter"] = t.get("diameter_mm") or t.get("diameter")
                 t["diameter_mm"] = diameter
-                t["diameter"] = diameter
+                t.pop("diameter", None)  # remove deprecated alias
 
     operations = op.get("operations", [])
     for idx in affected:
@@ -1018,7 +1802,183 @@ def _apply_diameter(op: dict, issue: dict, diameter: float, log_entry: dict) -> 
             if "tool_diameter" in params:
                 params["tool_diameter"] = diameter
 
-    log_entry["after"] = {"diameter": diameter}
+    log_entry["after"] = {"diameter_mm": diameter}
+
+
+def _apply_bolt_circle_param(
+    op: dict, issue: dict, param_name: str, value: Any, log_entry: dict,
+) -> None:
+    """Set a bolt circle parameter on affected operations."""
+    affected = issue.get("affected_operations", [])
+    operations = op.get("operations", [])
+    before_values: dict[int, Any] = {}
+
+    for idx in affected:
+        if 0 <= idx < len(operations) and isinstance(operations[idx], dict):
+            params = operations[idx].setdefault("parameters", {})
+            before_values[idx] = params.get(param_name)
+            params[param_name] = value
+
+    # If no specific operations affected, apply to all bolt_circle operations
+    if not affected:
+        for i, o in enumerate(operations):
+            if isinstance(o, dict) and o.get("type") == "bolt_circle":
+                params = o.setdefault("parameters", {})
+                if params.get(param_name) is None:
+                    before_values[i] = None
+                    params[param_name] = value
+
+    log_entry["before"] = log_entry.get("before", {})
+    log_entry["before"][param_name] = before_values
+    log_entry["after"] = log_entry.get("after", {})
+    log_entry["after"][param_name] = value
+
+
+def _apply_hole_purpose(
+    op: dict,
+    hole_type: str,
+    payload: dict,
+    log_entry: dict,
+) -> None:
+    """Atomically update tool diameter, description, and assumption
+    when the operator confirms the hole purpose.
+
+    This ensures that tap_drill → correct tap-drill diameter, and
+    clearance → correct clearance diameter — never a mismatch.
+    """
+    bolt_size = payload.get("bolt_size") or _detect_bolt_size(op)
+    explicit_diameter = payload.get("diameter_mm")
+
+    # Determine target diameter
+    if explicit_diameter is not None:
+        diameter = float(explicit_diameter)
+    elif bolt_size and bolt_size in _METRIC_THREAD_TABLE:
+        thread = _METRIC_THREAD_TABLE[bolt_size]
+        if hole_type == "tap_drill":
+            diameter = thread["tap_drill_mm"]
+        elif hole_type == "clearance":
+            diameter = thread["clearance_mm"]
+        else:
+            diameter = None
+    else:
+        diameter = None
+
+    # Build description
+    if bolt_size and diameter is not None:
+        if hole_type == "tap_drill":
+            desc = f"{diameter}mm HSS twist drill ({bolt_size} tap drill)"
+        elif hole_type == "clearance":
+            desc = f"{diameter}mm HSS twist drill ({bolt_size} clearance)"
+        else:
+            desc = f"{diameter}mm drill"
+    elif diameter is not None:
+        desc = f"{diameter}mm drill ({hole_type})"
+    else:
+        desc = None
+
+    # Record before state
+    tools = op.get("tools", [])
+    old_tool_info = {}
+    for t in tools:
+        if isinstance(t, dict) and t.get("type") == "drill":
+            old_tool_info = {
+                "diameter_mm": t.get("diameter_mm"),
+                "description": t.get("description"),
+            }
+            break
+
+    log_entry["before"] = {
+        "hole_type": None,
+        "tool": old_tool_info,
+    }
+
+    # Update all drill tools
+    if diameter is not None:
+        for t in tools:
+            if isinstance(t, dict) and t.get("type") == "drill":
+                t["diameter_mm"] = diameter
+                if desc:
+                    t["description"] = desc
+
+    log_entry["after"] = {
+        "hole_type": hole_type,
+        "bolt_size": bolt_size,
+        "diameter_mm": diameter,
+        "description": desc,
+    }
+
+    op.setdefault("assumptions", []).append(
+        f"Confirmed hole purpose: {hole_type}"
+        + (f" ({bolt_size} → D{diameter}mm)" if bolt_size and diameter else "")
+    )
+
+
+def _recalculate_bolt_circle(
+    op: dict,
+    issue: dict,
+    log_entry: dict,
+    new_center_x: float | None = None,
+    new_center_y: float | None = None,
+    new_start_angle_deg: float | None = None,
+) -> None:
+    """Recalculate bolt circle hole positions after a parameter change.
+
+    Detects the current bolt circle parameters from the operations,
+    applies the change, and updates all hole coordinates.
+    """
+    operations = op.get("operations", [])
+    detected = _detect_bolt_circle_params_from_ops(operations)
+    if detected is None:
+        log_entry["before"] = {}
+        log_entry["after"] = {"error": "Could not detect bolt circle parameters"}
+        return
+
+    # Build new parameters (use detected values as base)
+    cx = new_center_x if new_center_x is not None else detected["center_x"]
+    cy = new_center_y if new_center_y is not None else detected["center_y"]
+    start_angle = (
+        new_start_angle_deg if new_start_angle_deg is not None
+        else detected["start_angle_deg"]
+    )
+    radius = detected["radius"]
+    num_holes = detected["num_holes"]
+
+    log_entry["before"] = {
+        "center_x": detected["center_x"],
+        "center_y": detected["center_y"],
+        "start_angle_deg": detected["start_angle_deg"],
+    }
+
+    # Recalculate positions
+    from cnc.tools.drill_tools import calculate_bolt_circle_positions
+
+    new_positions = calculate_bolt_circle_positions(
+        cx, cy, radius, num_holes, start_angle,
+    )
+
+    # Update operations
+    for i, pos in enumerate(new_positions):
+        if i < len(operations) and isinstance(operations[i], dict):
+            params = operations[i].setdefault("parameters", {})
+            params["x"] = pos["x"]
+            params["y"] = pos["y"]
+
+    log_entry["after"] = {
+        "center_x": cx,
+        "center_y": cy,
+        "start_angle_deg": start_angle,
+        "positions_updated": len(new_positions),
+    }
+
+    # Document the confirmed value
+    if new_center_x is not None or new_center_y is not None:
+        op.setdefault("assumptions", []).append(
+            f"Confirmed bolt circle center: X{cx} / Y{cy}"
+        )
+    if new_start_angle_deg is not None:
+        op.setdefault("assumptions", []).append(
+            f"Confirmed bolt circle start angle: {start_angle}°"
+        )
 
 
 def _remove_assumption(op: dict, prefix: str) -> None:

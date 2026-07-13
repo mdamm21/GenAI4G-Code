@@ -47,8 +47,13 @@ def generate_gcode_from_operations(operation_plan: dict) -> str:
     lines.append(f"(WCS: {wcs})")
     for a in assumptions:
         lines.append(f"(ASSUMPTION: {a})")
-    for w in warnings_plan:
-        lines.append(f"(WARNING: {w})")
+    consolidated = operation_plan.get("consolidated_warnings")
+    header_warnings = consolidated if consolidated is not None else warnings_plan
+    seen_w: set[str] = set()
+    for w in header_warnings:
+        if w not in seen_w:
+            seen_w.add(w)
+            lines.append(f"(WARNING: {w})")
 
     # --- Safety setup ---
     unit_code = get_units_code(units)

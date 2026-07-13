@@ -10,6 +10,18 @@ except ImportError:
 # Drill operation types that require complete x/y/z/feedrate parameters.
 _DRILL_OP_TYPES = {"drill", "drilling", "peck_drill", "bore", "ream"}
 
+# All operation types that at least one postprocessor can translate to G-code.
+# Any type NOT in this set is unsupported and must block the pipeline.
+_ALL_SUPPORTED_OP_TYPES = {
+    # drill
+    "drill", "drilling", "peck_drill", "bore", "ream",
+    # mill
+    "facing", "face_mill", "face", "slot", "pocket", "pocket_mill",
+    "profile", "contour",
+    # laser (grbl only)
+    "laser_cut", "laser_engrave", "laser_mark",
+}
+
 # Mill facing operation types — the structured typed "facing" op only.
 # Legacy "face_mill" and "face" types use a different parameter schema and are
 # not subject to the new structured facing checks.
@@ -126,6 +138,19 @@ def validate_operation_plan(operation_plan: dict) -> dict:
                 warnings.append(
                     f"{op_label}: no spindle_speed/spindle_rpm specified. "
                     "Spindle start (M03) will be skipped."
+                )
+
+    # --- Unsupported operation type check (fail-closed) ---
+    if operations:
+        for i, op in enumerate(operations):
+            if not isinstance(op, dict):
+                continue
+            op_type = op.get("type", "")
+            if op_type and op_type not in _ALL_SUPPORTED_OP_TYPES:
+                errors.append(
+                    f"Unsupported operation type '{op_type}' in operation {i}. "
+                    f"No postprocessor can translate this to G-code. "
+                    f"Supported types: {sorted(_ALL_SUPPORTED_OP_TYPES)}."
                 )
 
     # --- Mill-specific checks ---
@@ -434,6 +459,42 @@ def validate_operation_plan(operation_plan: dict) -> dict:
             "Material was not specified. "
             "Specify a material for guardrail checks and documentation."
         )
+
+    # --- Contradictory state check: value present but still in missing_info ---
+    missing_info = operation_plan.get("missing_info", [])
+    if isinstance(missing_info, list) and missing_info and operations:
+        mi_text = " ".join(str(m) for m in missing_info).lower()
+
+        # Check if feedrate is set on operations but still listed as missing
+        if "feedrate" in mi_text:
+            has_feedrate = any(
+                isinstance(o, dict) and (o.get("feedrate_mmpm") or o.get("feedrate"))
+                for o in operations
+            )
+            if has_feedrate:
+                errors.append(
+                    "Contradictory plan state: feedrate is set on operation(s) "
+                    "but 'feedrate' is still listed in missing_info."
+                )
+
+        # Check spindle
+        if "spindle" in mi_text:
+            has_spindle = any(
+                isinstance(o, dict) and (o.get("spindle_rpm") or o.get("spindle_speed"))
+                for o in operations
+            )
+            if has_spindle:
+                errors.append(
+                    "Contradictory plan state: spindle speed is set on operation(s) "
+                    "but 'spindle' is still listed in missing_info."
+                )
+
+        # Check safe_z
+        if "safe_z" in mi_text and operation_plan.get("safe_z") is not None:
+            errors.append(
+                "Contradictory plan state: safe_z is set on plan "
+                "but 'safe_z' is still listed in missing_info."
+            )
 
     ok = len(errors) == 0
     return {"ok": ok, "errors": errors, "warnings": warnings}
