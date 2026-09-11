@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "genai4g"
 version = "0.1.0"
 description = "GenAI4G — CNC G-code generation via MCP (Model Context Protocol)"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.54.0",

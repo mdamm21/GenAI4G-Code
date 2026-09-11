@@ -1072,3 +1072,9 @@ When actionable warnings are detected, the CLI will:
 > The system deliberately refuses to silently invent critical machining parameters.
 > Missing information is reported as `missing_info` or `warnings` rather than
 > substituted with potentially unsafe defaults.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
